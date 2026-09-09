@@ -1,0 +1,16 @@
+# 족보 PDF·결과물은 절대 커밋하지 않는다
+*.pdf
+*.docx
+output/
+
+__pycache__/
+*.pyc
+*.pyo
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Windows poppler — 에이전트가 런타임에 받는 바이너리(동봉 아님)
+poppler_win/
+poppler_win.zip

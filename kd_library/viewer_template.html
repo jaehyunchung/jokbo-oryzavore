@@ -1,0 +1,3448 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>족보 뷰어</title>
+<style>
+:root{
+  --bg:#f4f6f9;--card:#fff;
+  --primary:#2563eb;--pl:#eff6ff;
+  --ok:#16a34a;--ok-bg:#f0fdf4;
+  --ng:#dc2626;--ng-bg:#fef2f2;
+  --text:#111827;--sub:#6b7280;--border:#e5e7eb;
+  --flag:#f59e0b;--un:#9ca3af;
+  --fs:1;   /* 본문 글자 크기 배율 — html[data-font] 로 S/M/L 전환. M(기본)=1 이라 기존 px 그대로 */
+}
+/* 글자 크기 S/M/L. 본문 4곳만 calc(원래px * var(--fs)) 로 곱한다(UI 치수는 건드리지 않는다). */
+html[data-font="S"]{--fs:0.875;}
+html[data-font="L"]{--fs:1.125;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;}
+.screen{display:none;} .screen.active{display:block;}
+
+/* ══ FILTER ══ */
+.f-wrap{max-width:580px;margin:0 auto;padding:0 16px 100px;}
+.f-hero{padding:24px 0 16px;text-align:center;position:relative;}
+.f-hero h1{font-size:21px;font-weight:800;}
+.f-hero p{font-size:12px;color:var(--sub);margin-top:4px;}
+.btn-gear{position:absolute;top:20px;right:0;background:none;border:none;cursor:pointer;
+  font-size:20px;opacity:.6;transition:opacity .15s;padding:4px;}
+.btn-gear:hover{opacity:1;}
+
+.mode-tabs{display:flex;gap:8px;margin-bottom:22px;}
+.mode-tab{flex:1;padding:12px 8px;border-radius:12px;border:1.5px solid var(--border);
+  background:var(--card);cursor:pointer;font-size:13px;font-weight:600;
+  color:var(--sub);transition:all .15s;text-align:center;}
+.mode-tab:hover{border-color:var(--primary);color:var(--primary);}
+.mode-tab.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+.mode-desc{font-size:11px;font-weight:400;display:block;margin-top:3px;opacity:.85;}
+.opt-row{display:flex;gap:8px;margin:-8px 0 22px;}
+.opt-tg{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:9px 8px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--card);cursor:pointer;font-size:12px;font-weight:600;color:var(--sub);transition:all .15s;}
+.opt-tg:hover{border-color:var(--primary);color:var(--primary);}
+.opt-tg.on{background:var(--pl);border-color:var(--primary);color:var(--primary);}
+.opt-tg .ot-st{font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:#f3f4f6;color:var(--sub);}
+.opt-tg.on .ot-st{background:var(--primary);color:#fff;}
+
+.steps{display:flex;align-items:center;justify-content:center;margin-bottom:22px;}
+.step-item{display:flex;align-items:center;}
+.sdot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;border:2px solid var(--border);background:var(--card);color:var(--sub);
+  transition:all .2s;cursor:pointer;}
+.sdot.done{background:var(--ok);border-color:var(--ok);color:#fff;}
+.sdot.cur{background:var(--primary);border-color:var(--primary);color:#fff;}
+.slbl{font-size:11px;margin:0 5px;color:var(--sub);transition:color .2s;}
+.slbl.done{color:var(--ok);font-weight:600;}
+.slbl.cur{color:var(--primary);font-weight:700;}
+.sarr{font-size:11px;color:var(--border);margin:0 1px;}
+
+.sum-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;min-height:24px;}
+.sum-pill{display:flex;align-items:center;gap:4px;background:var(--card);
+  border:1.5px solid var(--border);border-radius:20px;padding:3px 10px;
+  font-size:11px;cursor:pointer;transition:border-color .15s;}
+.sum-pill:hover{border-color:var(--sub);}
+.sp-lbl{color:var(--sub);} .sp-val{font-weight:700;} .sp-x{color:var(--sub);font-size:12px;}
+
+.step-panel{animation:fadeUp .2s ease;}
+.step-q{font-size:15px;font-weight:700;margin-bottom:10px;}
+.step-note{font-size:11px;color:var(--sub);margin-bottom:11px;margin-top:-5px;}
+.chips{display:flex;flex-wrap:wrap;gap:7px;}
+.chip{padding:8px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);
+  font-size:13px;cursor:pointer;transition:all .15s;color:var(--text);user-select:none;}
+.chip:hover{border-color:var(--primary);color:var(--primary);}
+.chip.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600;}
+.chip.flag-chip{border-color:var(--flag);color:var(--flag);}
+.chip.flag-chip.on{background:var(--flag);border-color:var(--flag);color:#fff;}
+
+.f-footer{position:fixed;bottom:0;left:0;right:0;background:var(--card);
+  border-top:1px solid var(--border);padding:11px 14px;display:flex;align-items:center;gap:9px;}
+.f-count{flex:1;font-size:12px;color:var(--sub);}
+.f-count strong{color:var(--primary);font-size:14px;}
+.btn-fp{padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--card);cursor:pointer;font-size:13px;color:var(--sub);}
+.btn-fp:disabled{opacity:.35;cursor:default;}
+.btn-fn{padding:10px 18px;border-radius:10px;background:var(--primary);color:#fff;
+  border:none;cursor:pointer;font-size:14px;font-weight:700;transition:opacity .15s;}
+.btn-fn:hover:not(:disabled){opacity:.9;}
+.btn-fn:disabled{background:#d1d5db;cursor:default;}
+
+/* ══ MODAL (설정/리셋) ══ */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;
+  align-items:center;justify-content:center;padding:20px;}
+.modal-bg.on{display:flex;}
+.modal{background:var(--card);border-radius:16px;max-width:380px;width:100%;
+  padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.2);animation:fadeUp .2s ease;}
+.modal h3{font-size:16px;font-weight:800;margin-bottom:14px;}
+.reset-row{border:1.5px solid var(--border);border-radius:12px;padding:13px;margin-bottom:10px;}
+.reset-row .rr-top{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:600;}
+.reset-row .rr-sub{font-size:11px;color:var(--sub);margin-top:2px;}
+.rr-btn{margin-top:9px;padding:8px 12px;border-radius:9px;border:1.5px solid var(--ng);
+  background:var(--card);color:var(--ng);font-size:12px;font-weight:700;cursor:pointer;width:100%;}
+.rr-btn:disabled{opacity:.4;cursor:default;border-color:var(--border);color:var(--sub);}
+.rr-confirm{margin-top:9px;display:flex;gap:7px;align-items:center;font-size:12px;}
+.rr-confirm span{flex:1;color:var(--ng);font-weight:600;}
+.rr-confirm button{padding:7px 11px;border-radius:8px;border:none;font-size:12px;font-weight:700;cursor:pointer;}
+.rrc-yes{background:var(--ng);color:#fff;} .rrc-no{background:#f3f4f6;color:var(--sub);}
+.modal .opt-tg{flex:0 0 auto;padding:6px 9px;}
+.fs-row{display:flex;gap:6px;}   /* 글자 크기 [작게][보통][크게] — 확신도 토글과 같은 .opt-tg 토큰 재사용 */
+.modal-close{width:100%;margin-top:6px;padding:11px;border-radius:11px;border:1.5px solid var(--border);
+  background:var(--card);font-size:13px;font-weight:600;cursor:pointer;color:var(--text);}
+
+/* ══ QUIZ ══ */
+.header{background:var(--card);border-bottom:1px solid var(--border);
+  padding:10px 13px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;}
+.h-left{display:flex;align-items:center;gap:7px;}
+.btn-back{background:none;border:none;cursor:pointer;font-size:18px;color:var(--sub);padding:2px 4px;}
+.h-title{font-size:13px;font-weight:700;}
+.h-sub{font-size:10px;color:var(--sub);}
+.h-right{display:flex;align-items:center;gap:8px;}
+.btn-end{padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);
+  background:var(--card);cursor:pointer;font-size:12px;font-weight:600;color:var(--sub);transition:all .13s;}
+.btn-end:hover{border-color:var(--primary);color:var(--primary);}
+.btn-grade{padding:6px 12px;border-radius:8px;background:var(--ok);color:#fff;
+  border:none;cursor:pointer;font-size:12px;font-weight:700;}
+.prog-wrap{text-align:right;}
+.prog-text{font-size:12px;font-weight:700;color:var(--primary);}
+.prog-bg{width:64px;height:4px;background:var(--border);border-radius:2px;margin:3px 0 0 auto;}
+.prog-fill{height:4px;background:var(--primary);border-radius:2px;transition:width .3s;}
+
+.exam-banner{background:#fef3c7;border-bottom:1px solid #fde68a;
+  padding:6px 14px;font-size:11px;font-weight:600;color:#92400e;text-align:center;}
+.score-strip{background:var(--card);border-bottom:1px solid var(--border);
+  padding:6px 13px;display:flex;gap:14px;font-size:12px;flex-wrap:wrap;}
+.si{display:flex;align-items:center;gap:4px;}
+.sd{width:7px;height:7px;border-radius:50%;}
+
+.qmain{max-width:680px;margin:0 auto;padding:12px 12px 60px;}
+.qdots{display:flex;flex-wrap:nowrap;gap:5px;margin-bottom:11px;
+  overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-ms-overflow-style:none;}
+.qdots::-webkit-scrollbar{display:none;}
+.qgap{flex:0 0 auto;min-width:18px;height:26px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:var(--sub);cursor:pointer;opacity:.6;}
+.qgap:hover{opacity:1;color:var(--primary);}
+.qdot{flex:0 0 auto;width:26px;height:26px;border-radius:50%;position:relative;
+  border:1.5px solid var(--border);background:var(--card);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;cursor:pointer;color:var(--sub);transition:all .12s;}
+.qdot:hover{border-color:var(--primary);color:var(--primary);}
+.qdot.cur{background:var(--primary);border-color:var(--primary);color:#fff;}
+.qdot.ok{background:var(--ok);border-color:var(--ok);color:#fff;}
+.qdot.ng{background:var(--ng);border-color:var(--ng);color:#fff;}
+.qdot.sk{background:#6b7280;border-color:#6b7280;color:#fff;}
+.qdot.un{background:#fff;border-color:var(--un);border-style:dashed;color:var(--un);}
+.qdot.answered{background:#dbeafe;border-color:var(--primary);color:var(--primary);}
+.qdot .flag-pip{position:absolute;top:-2px;right:-2px;width:8px;height:8px;
+  background:var(--flag);border-radius:50%;border:1.5px solid #fff;}
+
+.sec-badge{display:inline-flex;align-items:center;background:var(--pl);color:var(--primary);
+  font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;margin-bottom:8px;}
+
+.card{background:var(--card);border-radius:16px;
+  box-shadow:0 1px 4px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.04);
+  padding:18px 16px 14px;margin-bottom:10px;}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;}
+.meta-row{display:flex;flex-wrap:wrap;gap:5px;flex:1;}
+.badge{font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px;white-space:nowrap;}
+.b-gray{background:#f3f4f6;color:#374151;}
+.b-blue{background:#dbeafe;color:#1d4ed8;}
+.b-royal{background:#fef3c7;color:#92400e;}
+
+.btn-flag{background:none;border:none;cursor:pointer;font-size:18px;padding:0 0 0 8px;
+  opacity:.35;transition:opacity .15s;flex-shrink:0;line-height:1;}
+.btn-flag:hover{opacity:.7;} .btn-flag.on{opacity:1;}
+
+.q-num{font-size:11px;color:var(--sub);margin-bottom:4px;}
+/* 합답형(ㄱㄴㄷ·가나다)·매칭형 문두는 보기마다 줄이 바뀌어야 읽힌다.
+   데이터의 개행·정렬 공백을 그대로 살린다(매칭형 '1. …  2. …' 의 간격 보존). */
+.q-stem{font-size:calc(15px * var(--fs));line-height:1.65;font-weight:500;word-break:keep-all;white-space:pre-wrap;}
+.q-hint{margin:10px 0 14px;font-size:12px;font-weight:700;color:var(--primary);}
+.q-hint.wide{font-size:13px;}
+.stem-img{margin:12px 0 2px;text-align:center;}
+.stem-img img{max-width:100%;border-radius:10px;border:1px solid var(--border);cursor:zoom-in;}
+.stem-img .cap{font-size:11px;color:var(--sub);margin-top:5px;}
+/* 이미지 라이트박스(클릭 확대) */
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:400;align-items:center;justify-content:center;cursor:zoom-out;padding:24px;}
+#lightbox.on{display:flex;}
+#lightbox img{max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);}
+/* 시작화면 약점 집중 버튼 + 설정 백업 버튼 */
+.btn-weak{border:1.5px solid var(--primary);background:var(--pl);color:var(--primary);border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap;}
+.btn-weak:hover{opacity:.85;}
+.rr-btn.kbtn{border-color:var(--primary);color:var(--primary);}
+.bk-row{display:flex;gap:8px;}
+.bk-row .rr-btn{flex:1;}
+
+.options{margin-top:14px;display:flex;flex-direction:column;gap:6px;}
+.opt{width:100%;text-align:left;padding:9px 12px;border-radius:10px;
+  border:1.5px solid var(--border);background:#fff;cursor:pointer;
+  font-size:calc(14px * var(--fs));line-height:1.5;transition:all .12s;color:var(--text);
+  word-break:keep-all;display:flex;align-items:flex-start;gap:7px;}
+.opt:hover:not(:disabled){border-color:var(--primary);background:var(--pl);}
+.opt:disabled{cursor:default;}
+.opt-key{min-width:17px;height:17px;border-radius:4px;background:#f3f4f6;
+  border:1px solid #e5e7eb;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;color:var(--sub);margin-top:1px;flex-shrink:0;}
+.opt.sel{border-color:var(--primary);background:var(--pl);font-weight:600;}
+.opt.sel .opt-key{background:var(--primary);border-color:var(--primary);color:#fff;}
+.opt.ok{border-color:var(--ok);background:var(--ok-bg);color:var(--ok);font-weight:600;}
+.opt.ok .opt-key{background:var(--ok);border-color:var(--ok);color:#fff;}
+.opt.ng{border-color:var(--ng);background:var(--ng-bg);color:var(--ng);}
+.opt.ng .opt-key{background:var(--ng);border-color:var(--ng);color:#fff;}
+
+.action-row{display:flex;gap:7px;margin-top:13px;}
+.btn-reveal{flex:1;padding:10px;border-radius:10px;background:var(--primary);color:#fff;
+  border:none;cursor:pointer;font-size:14px;font-weight:700;transition:opacity .12s;}
+.btn-reveal:hover:not(:disabled){opacity:.9;}
+.conf-btn{flex:1;min-width:0;padding:10px 6px;border-radius:10px;background:var(--primary);color:#fff;
+  border:none;cursor:pointer;font-size:13px;font-weight:600;transition:opacity .12s;white-space:nowrap;}
+.conf-btn:hover:not(:disabled){opacity:.9;}
+.btn-skip{padding:10px 13px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--card);cursor:pointer;font-size:13px;color:var(--sub);}
+.btn-skip:hover{border-color:var(--sub);}
+
+.kbd-hint{text-align:center;font-size:11px;color:#9ca3af;margin-top:6px;}
+.kbd-hint kbd{background:#f3f4f6;border:1px solid #d1d5db;border-radius:4px;
+  padding:1px 5px;font-family:inherit;font-size:10px;}
+
+.hc-banner{padding:9px 12px;border:1.5px solid var(--ng);border-radius:10px;
+  background:var(--ng-bg);color:var(--ng);margin-bottom:8px;font-size:13px;font-weight:700;animation:fadeUp .2s ease;}
+.result-banner{display:flex;align-items:center;gap:7px;padding:9px 12px;border-radius:10px;
+  margin-bottom:8px;font-size:14px;font-weight:600;animation:fadeUp .2s ease;}
+.rb-ok{background:var(--ok-bg);color:var(--ok);}
+.rb-ng{background:var(--ng-bg);color:var(--ng);}
+.rb-sk{background:#f3f4f6;color:#374151;}
+.rb-time{margin-left:auto;font-size:11px;font-weight:600;color:var(--sub);}
+
+.expl-card{background:var(--card);border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);
+  padding:14px 16px;margin-bottom:10px;animation:fadeUp .22s ease;}
+.expl-lbl{font-size:10px;font-weight:700;color:var(--primary);letter-spacing:.5px;margin-bottom:5px;}
+.expl-txt{font-size:calc(13.5px * var(--fs));line-height:1.7;word-break:keep-all;}
+.expl-txt ul{margin:4px 0 0 2px;padding-left:16px;}
+.expl-txt li{margin-bottom:4px;}
+.expl-hr{border:none;border-top:1px solid var(--border);margin:11px 0;}
+.blk{margin-top:11px;}
+.blk-lbl{font-size:10px;font-weight:700;letter-spacing:.5px;margin-bottom:4px;color:var(--sub);}
+.blk-imp{display:inline-block;background:var(--pl);color:var(--primary);font-weight:700;
+  font-size:13px;padding:4px 11px;border-radius:9px;}
+.clin-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:3px;}
+.clin-table th{text-align:left;width:64px;vertical-align:top;color:var(--sub);font-weight:600;
+  padding:5px 8px;border:1px solid var(--border);background:#fafafa;}
+.clin-table td{padding:5px 8px;border:1px solid var(--border);line-height:1.5;}
+.wrong-list{font-size:12.5px;line-height:1.6;}
+.wrong-list li{margin-bottom:4px;}
+.tip-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.6;}
+.expl-orig{font-size:12px;color:var(--sub);line-height:1.6;}
+.expl-orig b{color:#374151;}
+.expl-src{font-size:11px;color:var(--sub);margin-top:4px;font-style:italic;}
+
+.nav-row{display:flex;gap:7px;}
+.btn-nav{flex:1;padding:11px;border-radius:12px;border:1.5px solid var(--border);
+  background:var(--card);cursor:pointer;font-size:14px;font-weight:600;color:var(--text);transition:all .12s;}
+.btn-nav:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
+.btn-nav:disabled{opacity:.35;cursor:default;}
+.btn-nav.primary{background:var(--primary);color:#fff;border-color:var(--primary);}
+.btn-nav.primary:hover:not(:disabled){opacity:.9;}
+
+/* ══ STATS ══ */
+.st-wrap{max-width:560px;margin:0 auto;padding:22px 14px 60px;}
+.st-hero{text-align:center;padding:24px 0 20px;}
+.st-hero h2{font-size:20px;font-weight:800;}
+.st-hero p{font-size:13px;color:var(--sub);margin-top:4px;}
+.mode-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:12px;}
+.mb-study{background:var(--pl);color:var(--primary);}
+.mb-exam{background:#fef3c7;color:#92400e;}
+.st-grid{display:grid;gap:8px;margin-bottom:18px;}
+.st-box{background:var(--card);border-radius:14px;padding:15px 10px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.st-num{font-size:26px;font-weight:800;}
+.st-lbl{font-size:11px;color:var(--sub);margin-top:3px;}
+.c-ok{color:var(--ok);} .c-ng{color:var(--ng);} .c-sk{color:#6b7280;} .c-un{color:var(--un);}
+.rate-wrap{background:var(--card);border-radius:14px;padding:15px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.rate-top{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:8px;}
+.rate-bg{height:12px;background:var(--border);border-radius:6px;overflow:hidden;}
+.rate-fill{height:12px;border-radius:6px;background:var(--ok);transition:width .6s ease;}
+.rate-note{font-size:11px;color:var(--sub);margin-top:7px;}
+.cum-box{background:var(--card);border-radius:14px;padding:13px 15px;margin-bottom:14px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);font-size:12.5px;color:var(--sub);}
+.cum-box b{color:var(--text);}
+.rev-section{background:var(--card);border-radius:14px;padding:15px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.rev-title{font-size:13px;font-weight:700;margin-bottom:10px;}
+.rev-item{padding:9px 11px;border-radius:10px;border:1.5px solid var(--border);
+  margin-bottom:7px;cursor:pointer;transition:border-color .12s;display:flex;align-items:flex-start;gap:8px;}
+.rev-item:hover{border-color:var(--primary);}
+.rev-item-body{flex:1;}
+.rev-stem{font-size:13px;line-height:1.5;margin-bottom:3px;word-break:keep-all;}
+.rev-ans{font-size:12px;color:var(--ok);font-weight:600;}
+.rev-tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:5px;}
+.tag-ng{background:var(--ng-bg);color:var(--ng);}
+.tag-sk{background:#f3f4f6;color:#374151;}
+.tag-un{background:#fff;border:1px dashed var(--un);color:var(--un);}
+.rev-flag-btn{background:none;border:none;cursor:pointer;font-size:16px;opacity:.35;
+  transition:opacity .13s;flex-shrink:0;padding:0;}
+.rev-flag-btn:hover{opacity:.7;} .rev-flag-btn.on{opacity:1;}
+.st-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.st-btn{flex:1;min-width:120px;padding:12px;border-radius:12px;cursor:pointer;font-size:13px;font-weight:700;border:none;transition:opacity .13s;}
+.st-btn:hover{opacity:.85;}
+.st-btn:disabled{opacity:.4;cursor:default;}
+.sb-retry{background:var(--primary);color:#fff;}
+.sb-flag{background:var(--flag);color:#fff;}
+.sb-new{background:var(--card);color:var(--text);border:1.5px solid var(--border)!important;font-weight:600;}
+.sb-new:hover{border-color:var(--primary)!important;color:var(--primary);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+/* ══ RAPID (⚡ 한 줄 복습) — 기존 카드·버튼 토큰 재사용, 앞/뒤 두 면만 다르게 ══ */
+.rr-prog{margin-left:auto;font-size:13px;font-weight:800;color:var(--primary);white-space:nowrap;}
+.rr-card{padding:20px 18px;}
+.rr-side{font-size:11px;font-weight:700;color:var(--sub);letter-spacing:.04em;margin-bottom:8px;}
+.rr-back{margin-top:16px;padding-top:14px;border-top:1px solid var(--border);animation:fadeUp .17s ease;}
+.rr-ans{font-size:calc(15px * var(--fs));font-weight:700;line-height:1.7;word-break:keep-all;white-space:pre-wrap;
+  border-left:3px solid var(--ok);padding-left:12px;}
+.rr-hint{font-size:12px;color:var(--sub);margin-top:16px;}
+.rr-done{font-size:18px;font-weight:800;text-align:center;margin-bottom:12px;}
+.rr-acts{margin-top:14px;}
+.rr-ok{background:var(--ok);color:#fff;}
+.rr-ng{background:var(--ng);color:#fff;}
+.rr-quit{flex:0 0 auto;min-width:0;padding:12px 16px;}
+/* 누적 통계 대시보드 */
+/* 시작화면 '다른 화면으로' 진입 알약들(📊 누적 통계 · 🌙 전날 모드) — 가운데 정렬 한 줄.
+   좁아지면 알약 단위로 함께 줄바꿈된다(한 개만 외톨이로 떨어지지 않음). */
+.hero-acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px;}
+.btn-dash{background:var(--pl);color:var(--primary);border:1.5px solid var(--primary);
+  border-radius:999px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;}
+.btn-dash:hover{background:var(--primary);color:#fff;}
+.dash-wrap{max-width:640px;margin:0 auto;padding:6px 14px 60px;}
+.dash-head,.scr-head{display:flex;align-items:center;gap:8px;padding:14px 0 6px;}
+.dash-head h2,.scr-head h2{font-size:18px;font-weight:800;}
+.dash-head p,.scr-head p{font-size:12px;color:var(--sub);}
+.dash-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 6px;}
+.dash-cell{background:var(--card);border-radius:12px;padding:13px 8px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.dc-num{font-size:21px;font-weight:800;}
+.dc-lbl{font-size:11px;color:var(--sub);margin-top:3px;}
+.dash-sec{font-size:13px;font-weight:700;color:var(--sub);margin:18px 2px 8px;}
+.dash-row{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:6px;}
+.dr-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.dr-name{font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dr-pct{font-size:13px;font-weight:800;white-space:nowrap;}
+.dr-bar{height:7px;background:var(--border);border-radius:4px;overflow:hidden;margin:6px 0 5px;}
+.dr-fill{height:7px;border-radius:4px;transition:width .5s ease;}
+.dr-meta{font-size:11px;color:var(--sub);display:flex;gap:12px;flex-wrap:wrap;}
+.dash-empty{text-align:center;color:var(--sub);padding:46px 14px;font-size:14px;line-height:1.7;}
+.dash-row.clickable{cursor:pointer;}
+.dash-row.clickable:hover{border-color:var(--primary);box-shadow:0 1px 6px rgba(37,99,235,.15);}
+.dr-go{color:var(--primary);font-size:12px;font-weight:700;}
+/* 검색·이어풀기·타이머 */
+.f-tools{display:flex;gap:8px;margin:2px 0 12px;flex-wrap:wrap;}
+/* 액션 버튼(이어풀기·약점 집중)은 한 덩어리로 묶어 통째로 줄바꿈시킨다.
+   → 좁은 화면에서 버튼 하나만 다음 줄에 외톨이로 남지 않는다. */
+.f-acts{display:flex;gap:8px;}
+.search-box{flex:1;display:flex;gap:6px;min-width:200px;}
+.search-box input{flex:1;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;outline:none;background:var(--card);color:var(--text);}
+.search-box input:focus{border-color:var(--primary);}
+.sb-go{border:none;background:var(--primary);color:#fff;border-radius:10px;padding:0 14px;font-weight:700;cursor:pointer;font-size:13px;}
+.btn-resume{border:1.5px solid var(--ok);background:var(--ok-bg);color:var(--ok);border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap;}
+.search-empty{font-size:12px;color:var(--ng);margin:-6px 2px 10px;}
+.opt-row{flex-wrap:wrap;}
+.exam-timer{font-size:14px;font-weight:800;color:var(--ng);padding:3px 9px;border-radius:8px;background:var(--ng-bg);white-space:nowrap;}
+.exam-timer.warn{animation:pulse .9s infinite;}
+@keyframes pulse{50%{opacity:.5;}}
+/* 정답률 추세 */
+.trend-wrap{display:flex;align-items:flex-end;gap:5px;height:74px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 10px 4px;}
+.trend-bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;min-width:0;height:100%;}
+.tb-col{width:100%;display:flex;align-items:flex-end;justify-content:center;flex:1;}
+.tb-fill{width:72%;min-height:3px;border-radius:3px 3px 0 0;}
+.tb-day{font-size:9px;color:var(--sub);white-space:nowrap;}
+
+/* ══ MOBILE (≤480px) — 좁은 화면 최소 대응 ══
+   목표는 하나: 375px 뷰포트에서 문서가 가로로 밀리지 않는 것(scrollWidth ≤ 375).
+   넘칠 수 있는 덩어리(표·블록 목록)는 문서가 아니라 자기 컨테이너 안에서 가로 스크롤한다.
+   데스크톱(≥481px)에는 이 블록이 적용되지 않으므로 기존 레이아웃은 그대로다. */
+@media (max-width:480px){
+  /* 가로 넘침 격리 — 안쪽이 넘쳐도 document 는 밀리지 않는다 */
+  .expl-card,.trend-wrap,#today-body,#rapid-body,#dash-v2,#dash-body,#rev-list,
+  #jn-sum-blocks,#jn-sum-tiers,#jn-scopes{overflow-x:auto;}
+  .card,.expl-card,.dash-row,.rev-item,.reset-row,.cum-box,.rate-wrap,.tip-box{max-width:100%;}
+
+  /* 좌우 여백 축소 — 본문 폭을 조금이라도 더 준다 */
+  .f-wrap,.qmain,.st-wrap,.dash-wrap{padding-left:12px;padding-right:12px;}
+  .card{padding:15px 13px 12px;}
+  .expl-card{padding:13px;}
+
+  /* 필터 칩 — 줄바꿈은 이미 .chips 가 하고, 여기서는 크기만 줄인다 */
+  .chip{padding:7px 11px;font-size:12px;}
+  .step-q{font-size:14px;}
+  .mode-tab{font-size:12px;padding:11px 6px;}
+  .mode-desc{font-size:10px;}
+  /* 액션 버튼 묶음은 데스크톱에서 한 줄 고정(nowrap)이라 좁으면 넘친다 → 여기서만 줄바꿈 허용 */
+  .f-acts{flex-wrap:wrap;}
+  .f-acts .btn-weak,.f-acts .btn-resume{flex:1 1 auto;font-size:12px;padding:8px 10px;}
+  .search-box{min-width:0;flex:1 1 100%;}
+
+  /* 선지 — 전폭 유지, 패딩만 축소 */
+  .opt{padding:9px 10px;}
+  .options{gap:5px;}
+  .opt-key{min-width:16px;height:16px;}
+  .conf-btn{font-size:12px;padding:10px 4px;}
+  .btn-skip{padding:10px 9px;font-size:12px;}
+
+  /* 헤더 — 글자를 줄이고 버튼을 아이콘 크기로 좁힌다 */
+  .header{padding:9px 10px;gap:6px;}
+  .h-left{gap:5px;min-width:0;}
+  .h-title{font-size:12px;}
+  .h-sub{font-size:9px;}
+  .h-right{gap:5px;}
+  .btn-end,.btn-grade{padding:6px 8px;font-size:11px;}
+  .prog-bg{width:46px;}
+  .exam-timer{font-size:12px;padding:3px 6px;}
+
+  /* 결과·오늘 할 일·한 줄 복습 버튼 묶음 — 최소폭을 낮춰 2열로 접는다 */
+  .st-btn{min-width:96px;font-size:12px;padding:11px 8px;}
+  .rr-quit{min-width:0;padding:11px 12px;}   /* '나가기' 는 데스크톱과 같이 내용 폭 유지 */
+  .st-btns{gap:6px;}
+  .dash-sum{gap:6px;}
+  .dash-cell{padding:11px 5px;}
+  .dc-num{font-size:18px;}
+  .st-num{font-size:22px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ FILTER ══════════ -->
+<div id="screen-filter" class="screen active">
+  <div class="f-wrap">
+    <div class="f-hero">
+      <h1 id="hero-title">족보 뷰어</h1>
+      <p id="hero-sub"></p>
+      <!-- 화면 진입 알약들. 전날 모드 버튼도 여기에 붙는다(jnInit) -->
+      <div class="hero-acts">
+        <button class="btn-dash" onclick="goDash()" title="범위별 정답률 등 누적 통계">📊 누적 통계</button>
+      </div>
+      <button class="btn-gear" onclick="openSettings()" title="저장 정보 관리">⚙️</button>
+    </div>
+    <div class="f-tools">
+      <div class="search-box">
+        <input id="q-search" type="search" placeholder="🔎 문항 검색 (키워드)" onkeydown="if(event.key==='Enter')runSearch()">
+        <button class="sb-go" onclick="runSearch()">검색</button>
+      </div>
+      <div class="f-acts">
+        <button class="btn-resume" id="btn-resume" style="display:none" onclick="resumeSession()"></button>
+        <button class="btn-weak" id="btn-weak" onclick="startWeak()" title="오답·정답률 낮은·🚩 문항 우선 20문항">🎯 약점 집중</button>
+        <button class="btn-weak" id="btn-today" type="button" onclick="cpOpen()" title="복습 due + 우선순위 신규를 시간 예산 안에서">🎯 오늘 할 일</button>
+        <button class="btn-weak" id="btn-rapid" type="button" onclick="rrStart(rrPairsFromList(filteredAll()))" title="문제+정답만 빠르게 넘기기">⚡ 한 줄 복습</button>
+      </div>
+    </div>
+    <div class="search-empty" id="search-empty" style="display:none"></div>
+    <div class="mode-tabs" id="mode-tabs">
+      <button class="mode-tab on" data-mode="study" onclick="setMode('study')">
+        📖 학습 모드<span class="mode-desc">문제마다 즉시 정답 확인</span>
+      </button>
+      <button class="mode-tab" data-mode="exam" onclick="setMode('exam')">
+        📝 시험 모드<span class="mode-desc">다 풀고 한꺼번에 채점</span>
+      </button>
+    </div>
+    <div class="opt-row">
+      <button class="opt-tg" id="tg-shuffle" onclick="toggleOpt('shuffle')" title="문항을 무작위 순서로">🔀 셔플<span class="ot-st" id="st-shuffle">OFF</span></button>
+      <button class="opt-tg" id="tg-hide" onclick="toggleOpt('hide')" title="범위·교수·연도·왕족 숨김 (정답 확인/채점 후 공개)">🙈 정보 가리기<span class="ot-st" id="st-hide">OFF</span></button>
+      <button class="opt-tg" id="tg-timer" onclick="toggleOpt('timer')" title="시험 모드: 1분/문항 제한시간 — 종료 시 자동 채점">⏱ 제한시간<span class="ot-st" id="st-timer">OFF</span></button>
+    </div>
+    <div class="steps" id="step-ind"></div>
+    <div class="sum-row" id="sum-row"></div>
+    <div id="step-panel"></div>
+  </div>
+  <div class="f-footer">
+    <div class="f-count">선택 문항: <strong id="f-count">—</strong></div>
+    <button class="btn-fp" id="btn-fp" onclick="fPrev()">← 이전</button>
+    <button class="btn-fn" id="btn-fn" onclick="fNext()">다음 →</button>
+  </div>
+</div>
+
+<!-- ══════════ QUIZ ══════════ -->
+<div id="screen-quiz" class="screen">
+  <div class="header">
+    <div class="h-left">
+      <button class="btn-back" type="button" onclick="goFilter()" aria-label="풀이 화면 닫기">←</button>
+      <div>
+        <div class="h-title"><span id="h-subject"></span> <span id="h-mode-badge"></span></div>
+        <div class="h-sub" id="h-sub"></div>
+      </div>
+    </div>
+    <div class="h-right">
+      <span class="exam-timer" id="exam-timer" style="display:none"></span>
+      <div class="prog-wrap">
+        <div class="prog-text" id="prog-text">1/1</div>
+        <div class="prog-bg"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+      </div>
+      <button class="btn-grade" id="btn-grade" onclick="gradeExam()" style="display:none">채점하기</button>
+      <button class="btn-end" id="btn-end" onclick="endSession()">결과 보기</button>
+    </div>
+  </div>
+  <div id="exam-banner" class="exam-banner" style="display:none">
+    📝 시험 모드 — 모든 문항을 선택한 뒤 상단 <b>채점하기</b>를 누르세요
+  </div>
+  <div class="score-strip" id="score-strip">
+    <div class="si"><div class="sd" style="background:var(--ok)"></div><span id="sc-ok">0</span> 정답</div>
+    <div class="si"><div class="sd" style="background:var(--ng)"></div><span id="sc-ng">0</span> 오답</div>
+    <div class="si"><div class="sd" style="background:#6b7280"></div><span id="sc-sk">0</span> 건너뜀</div>
+    <div class="si" id="si-ans" style="display:none"><div class="sd" style="background:var(--primary)"></div><span id="sc-ans">0</span> 선택됨</div>
+  </div>
+  <div class="qmain">
+    <div class="qdots" id="qdots"></div>
+    <div id="quiz-body"></div>
+  </div>
+</div>
+
+<!-- ══════════ STATS ══════════ -->
+<div id="screen-stats" class="screen">
+  <div class="st-wrap">
+    <div class="st-hero"><h2 id="st-title">결과 📊</h2><p id="st-sub"></p></div>
+    <div id="st-mode-badge" style="text-align:center;margin-bottom:14px;"></div>
+    <div class="st-grid" id="st-grid"></div>
+    <div class="rate-wrap">
+      <div class="rate-top"><span>정답률</span><span id="rate-pct" style="color:var(--ok);font-weight:800"></span></div>
+      <div class="rate-bg"><div class="rate-fill" id="rate-fill" style="width:0%"></div></div>
+      <div class="rate-note" id="rate-note"></div>
+    </div>
+    <div class="cum-box" id="cum-box"></div>
+    <div class="rev-section" id="rev-sec" style="display:none">
+      <div class="rev-title" id="rev-title">확인 필요 문항</div>
+      <div id="rev-list"></div>
+    </div>
+    <div class="st-btns">
+      <button class="st-btn sb-retry" onclick="retryWrong()" id="btn-retry">✗ 다시 풀기</button>
+      <button class="st-btn sb-flag" onclick="startFlagged()" id="btn-start-flagged">🚩 체크 문항 풀기</button>
+      <button class="st-btn sb-new" type="button" onclick="rrStartWrong()" id="btn-rapid-wrong" style="display:none">⚡ 오답 한 줄 복습</button>
+      <button class="st-btn sb-new" onclick="goFilter()">새 세션</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ TODAY (오늘 할 일) ══════════ -->
+<div id="screen-today" class="screen">
+  <div class="st-wrap" style="max-width:640px">
+    <div class="scr-head">
+      <button class="btn-back" type="button" onclick="goFilter()" aria-label="오늘 할 일 닫기">←</button>
+      <div><h2>🎯 오늘 할 일</h2><p>기한이 된 복습부터, 남는 시간에는 새 문항을 공부합니다.</p></div>
+    </div>
+    <div id="today-body"></div>
+  </div>
+</div>
+
+<!-- ══════════ RAPID (⚡ 한 줄 복습) ══════════ -->
+<div id="screen-rapid" class="screen">
+  <div class="st-wrap" style="max-width:640px">
+    <div class="scr-head">
+      <button class="btn-back" type="button" onclick="rrExit()" aria-label="한 줄 복습 닫기">←</button>
+      <div><h2>⚡ 한 줄 복습</h2><p id="rapid-sub"></p></div>
+      <div class="rr-prog" id="rapid-prog">0/0</div>
+    </div>
+    <div id="rapid-body"></div>
+    <div class="st-btns rr-acts" id="rapid-acts">
+      <button class="st-btn sb-retry" type="button" id="rapid-flip" onclick="rrFlip()">뒤집기 (Space)</button>
+      <button class="st-btn rr-ok" type="button" onclick="rrRate('ok')">알았다 (1)</button>
+      <button class="st-btn rr-ng" type="button" onclick="rrRate('ng')">몰랐다 (2)</button>
+      <button class="st-btn sb-new" type="button" onclick="rrNext()">다음 (→)</button>
+      <button class="st-btn sb-new rr-quit" type="button" onclick="rrExit()">나가기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ DASHBOARD (누적 통계) ══════════ -->
+<div id="screen-dash" class="screen">
+  <div class="dash-wrap">
+    <div class="dash-head">
+      <button class="btn-back" type="button" onclick="goFilter()" aria-label="누적 통계 닫기">←</button>
+      <div><h2>📊 누적 통계</h2><p id="dash-sub"></p></div>
+    </div>
+    <div id="dash-v2"></div>
+    <div id="dash-body"></div>
+    <div class="st-btns">
+      <button class="st-btn sb-new" onclick="goFilter()">← 돌아가기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SETTINGS MODAL ══════════ -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3>저장 정보 관리</h3>
+    <div class="reset-row">
+      <div class="rr-top"><span>🚩 오답 체크</span><span id="rs-flag-cnt" style="color:var(--flag)">0개</span></div>
+      <div class="rr-sub">체크해 둔 문항 목록</div>
+      <button class="rr-btn" id="rs-flag-btn" onclick="askReset('flag')">전체 초기화</button>
+      <div class="rr-confirm" id="rs-flag-confirm" style="display:none">
+        <span>정말 초기화할까요?</span>
+        <button class="rrc-yes" onclick="doReset('flag')">확인</button>
+        <button class="rrc-no" onclick="cancelReset('flag')">취소</button>
+      </div>
+    </div>
+    <div class="reset-row">
+      <div class="rr-top"><span>📊 풀이 이력</span><span id="rs-stat-cnt" style="color:var(--primary)">0회</span></div>
+      <div class="rr-sub">누적 정답률·풀이횟수·풀이시간 (복습 일정 포함)</div>
+      <button class="rr-btn" id="rs-stat-btn" onclick="askReset('stat')">전체 초기화</button>
+      <div class="rr-confirm" id="rs-stat-confirm" style="display:none">
+        <span>정말 초기화할까요?</span>
+        <button class="rrc-yes" onclick="doReset('stat')">확인</button>
+        <button class="rrc-no" onclick="cancelReset('stat')">취소</button>
+      </div>
+    </div>
+    <div class="reset-row">
+      <div class="rr-top">
+        <span>확신도 버튼</span>
+        <button type="button" class="opt-tg" id="tg-conf" onclick="toggleConf()" aria-label="확신도 버튼 사용" aria-pressed="true"><span class="ot-st" id="st-conf">ON</span></button>
+      </div>
+      <div class="rr-sub">학습 모드에서 확신·반반·찍음으로 답을 기록합니다.</div>
+    </div>
+    <div class="reset-row">
+      <div class="rr-top">
+        <span>글자 크기</span>
+        <div class="fs-row" id="fs-row" role="group" aria-label="글자 크기">
+          <button type="button" class="opt-tg" data-font="S" onclick="fontSize('S')" aria-pressed="false">작게</button>
+          <button type="button" class="opt-tg" data-font="M" onclick="fontSize('M')" aria-pressed="true">보통</button>
+          <button type="button" class="opt-tg" data-font="L" onclick="fontSize('L')" aria-pressed="false">크게</button>
+        </div>
+      </div>
+      <div class="rr-sub">문두·선지·해설·한 줄 복습 정답의 글자 크기를 조절합니다.</div>
+    </div>
+    <div class="reset-row">
+      <div class="rr-top"><span>💾 진도 백업</span></div>
+      <div class="rr-sub">정답 이력·🚩 체크·설정을 파일로 내보내고 불러오기 (기기 이동·리빌드 대비)</div>
+      <div class="bk-row">
+        <button class="rr-btn kbtn" onclick="exportProgress()">⬇ 내보내기</button>
+        <button class="rr-btn kbtn" onclick="document.getElementById('imp-file').click()">⬆ 불러오기</button>
+      </div>
+      <input id="imp-file" type="file" accept="application/json,.json" style="display:none" onchange="importProgress(this.files[0])">
+      <div class="rr-confirm" id="imp-msg" style="display:none"></div>
+    </div>
+    <button class="modal-close" onclick="closeSettings()">닫기</button>
+  </div>
+</div>
+
+<!-- JEONNAL:START -->
+<div id="screen-jn-settings" class="screen">
+  <div class="st-wrap" style="max-width:580px">
+    <div class="dash-head">
+      <button class="btn-back" id="jn-back-top" type="button" aria-label="전날 모드 설정 닫기">←</button>
+      <div><h2>전날 모드 설정</h2><p>시험 전까지의 시간을 고효율 학습 계획으로 나눕니다.</p></div>
+    </div>
+    <div class="rate-wrap" aria-live="polite">
+      <div class="rate-top"><span>시험까지 남은 시간</span><span id="jn-plan-state" style="color:var(--primary)">새 계획</span></div>
+      <div id="jn-countdown" style="font-size:20px;font-weight:800;color:var(--primary)">시험 일시를 선택하세요</div>
+    </div>
+    <form id="jn-settings-form" novalidate>
+      <div class="reset-row">
+        <label class="rr-top" for="jn-examat"><span>시험 일시</span></label>
+        <div class="rr-sub">현재보다 미래인 일시를 선택하세요.</div>
+        <div class="search-box" style="margin-top:9px">
+          <input id="jn-examat" type="datetime-local" required aria-describedby="jn-examat-error">
+        </div>
+        <div id="jn-examat-error" class="rr-sub" role="alert" style="display:none;color:var(--ng);margin-top:6px"></div>
+      </div>
+      <div class="reset-row">
+        <label class="rr-top" for="jn-budget-min"><span>공부 가능 시간</span><span style="color:var(--sub)">분</span></label>
+        <div class="rr-sub">시험 30분 전까지 확보할 수 있는 정수 분을 입력하세요.</div>
+        <div class="search-box" style="margin-top:9px">
+          <input id="jn-budget-min" type="number" min="0" step="1" inputmode="numeric" placeholder="예: 180" required aria-describedby="jn-budget-error jn-budget-note">
+        </div>
+        <div id="jn-budget-error" class="rr-sub" role="alert" style="display:none;color:var(--ng);margin-top:6px"></div>
+        <div id="jn-budget-note" class="rr-sub" aria-live="polite" style="display:none;color:var(--primary);margin-top:6px"></div>
+      </div>
+      <div class="reset-row">
+        <label class="rr-top" for="jn-goal"><span>학습 목표</span></label>
+        <div class="rr-sub">표준은 균형 있게, 합격 우선은 필수 문항 비중을 높입니다.</div>
+        <select id="jn-goal" required aria-describedby="jn-goal-error" style="width:100%;margin-top:9px;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;background:var(--card);color:var(--text)">
+          <option value="STANDARD">표준</option>
+          <option value="PASS">합격 우선</option>
+        </select>
+        <div id="jn-goal-error" class="rr-sub" role="alert" style="display:none;color:var(--ng);margin-top:6px"></div>
+      </div>
+      <fieldset class="reset-row" style="min-width:0">
+        <legend style="font-size:13px;font-weight:600;padding:0 4px">학습 범위</legend>
+        <div class="rr-sub">하나 이상 선택하세요.</div>
+        <div id="jn-scopes" class="chips" style="margin-top:9px"></div>
+        <div id="jn-scope-error" class="rr-sub" role="alert" style="color:var(--ng);margin-top:7px">범위를 하나 이상 선택하세요.</div>
+      </fieldset>
+      <div id="jn-form-error" class="reset-row" role="alert" aria-live="assertive" style="display:none;border-color:var(--ng);color:var(--ng);font-size:12px"></div>
+      <div class="st-btns">
+        <button class="st-btn sb-new" id="jn-back-bottom" type="button">돌아가기</button>
+        <button class="st-btn sb-retry" id="jn-save" type="submit" style="opacity:.35;cursor:default" disabled>계획 저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+<div id="jn-warning" role="alert" aria-live="assertive" style="display:none;margin:0 0 12px;padding:11px 14px;border:1.5px solid var(--ng);border-radius:12px;background:var(--ng-bg);color:var(--ng);font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
+<div id="screen-jn-summary" class="screen">
+  <div class="dash-wrap">
+    <div class="dash-head">
+      <button class="btn-back" id="jn-sum-back" type="button" aria-label="계획 요약 닫기">←</button>
+      <div><h2>🌙 전날 모드 계획</h2><p>남은 시간에 맞춰 나눈 학습 순서입니다.</p></div>
+    </div>
+    <div class="rate-wrap" aria-live="polite">
+      <div class="rate-top"><span>시험까지 남은 시간</span><span id="jn-sum-budget" style="color:var(--sub);font-weight:600"></span></div>
+      <div id="jn-sum-countdown" style="font-size:20px;font-weight:800;color:var(--primary)">—</div>
+    </div>
+    <div id="jn-sum-adjustment" class="rate-wrap" role="status" aria-live="polite" style="display:none">
+      <div class="rate-top"><span id="jn-sum-adjustment-title" style="font-weight:800"></span><span id="jn-sum-adjustment-revision" style="font-weight:700"></span></div>
+      <div id="jn-sum-adjustment-detail" class="rate-note"></div>
+    </div>
+    <section id="jn-sum-completion" class="st-hero" style="display:none" aria-labelledby="jn-sum-completion-title">
+      <span class="mode-badge mb-study">완료</span>
+      <h2 id="jn-sum-completion-title">전날 학습을 마쳤습니다</h2>
+      <p>계획 범위와 학습 기록을 확인하세요.</p>
+      <div class="dash-sum" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr))">
+        <div class="dash-cell"><div class="dc-num" id="jn-sum-done-questions">0</div><div class="dc-lbl">계획 문항</div></div>
+        <div class="dash-cell"><div class="dc-num" id="jn-sum-done-blocks">0 / 0</div><div class="dc-lbl">완료 블록</div></div>
+        <div class="dash-cell"><div class="dc-num" id="jn-sum-done-time">약 0초</div><div class="dc-lbl">총 활성 학습 시간</div></div>
+        <div class="dash-cell"><div class="dc-num" id="jn-sum-done-accuracy">—</div><div class="dc-lbl">계획 정답률</div></div>
+      </div>
+    </section>
+    <div class="rate-wrap">
+      <div class="rate-top"><span>선택 범위 반영률</span><span id="jn-sum-coverage" style="color:var(--primary);font-weight:800">0%</span></div>
+      <div class="rate-bg"><div class="rate-fill" id="jn-sum-coverage-bar" style="width:0%;background:var(--primary)"></div></div>
+      <div class="rate-note">선택한 범위 문항의 과거 출제 연도 가중치를 기준으로 계산한 값입니다.</div>
+    </div>
+    <div class="dash-sec">단계별 문항</div>
+    <div id="jn-sum-tiers" class="dash-sum" style="grid-template-columns:repeat(auto-fit,minmax(118px,1fr))"></div>
+    <div class="dash-sec">시간을 더 쓰면</div>
+    <div class="cum-box" id="jn-sum-gain"></div>
+    <div class="dash-sec">학습 블록 <span id="jn-sum-block-total" style="font-weight:600;color:var(--sub)"></span></div>
+    <div id="jn-sum-blocks"></div>
+    <div id="jn-sum-notice" role="status" aria-live="polite" style="display:none;margin:11px 2px 0;font-size:12px;color:var(--primary);font-weight:600"></div>
+    <div class="st-btns" style="margin-top:14px">
+      <button class="st-btn sb-new" id="jn-sum-edit" type="button">설정 수정</button>
+      <button class="st-btn sb-new" id="jn-sum-back-bottom" type="button">돌아가기</button>
+      <button class="st-btn sb-retry" id="jn-sum-start" type="button">학습 시작</button>
+      <button class="st-btn sb-retry" id="jn-sum-recreate" type="button" style="display:none">다시 만들기</button>
+    </div>
+  </div>
+</div>
+<!-- JEONNAL:END -->
+
+<div id="lightbox" onclick="closeLightbox()"><img id="lightbox-img" alt="확대 이미지"></div>
+
+<script>
+/*__DATA__*/
+
+// ─────────── 데이터 바인딩 ───────────
+const ALL_Q = APP_DATA.questions;
+const SCOPE_ORDER = APP_DATA.scopeOrder;
+const STORAGE_KEY = APP_DATA.storageKey;
+const FLAG_KEY = STORAGE_KEY + '_flagged';
+const STAT_KEY = STORAGE_KEY + '_stats';
+document.getElementById('hero-title').textContent = APP_DATA.title;
+document.getElementById('hero-sub').textContent = APP_DATA.subject + ' · ' + ALL_Q.length + '문항';
+document.getElementById('h-subject').textContent = APP_DATA.subject;
+document.title = APP_DATA.title;
+
+// ─────────── FLAG (오답 체크, localStorage) ───────────
+// qid = scope + meta + stem 앞부분. meta(연도·교수) 포함으로 '제시문 동일 R형 변형' 키 충돌 방지.
+function getQid(q){ return q.scope + '||' + (q.meta||'') + '||' + q.stem.slice(0,60); }
+function loadFlags(){ try{ return new Set(JSON.parse(localStorage.getItem(FLAG_KEY)||'[]')); }catch{ return new Set(); } }
+function saveFlags(s){ try{ localStorage.setItem(FLAG_KEY, JSON.stringify([...s])); }catch{} }
+function isFlag(q){ return loadFlags().has(getQid(q)); }
+function toggleFlag(q){ const s=loadFlags(), id=getQid(q); if(s.has(id)) s.delete(id); else s.add(id); saveFlags(s); return s.has(id); }
+
+// ─────────── 누적 풀이 이력 (localStorage) ───────────
+// store[qid] = {a:시도, c:정답, e:풀이시간ms}
+function loadStats(){ try{ return JSON.parse(localStorage.getItem(STAT_KEY)||'{}'); }catch{ return {}; } }
+function saveStats(o){ try{ localStorage.setItem(STAT_KEY, JSON.stringify(o)); return true; }catch{ srWarnOnce('저장 실패 — 브라우저 저장공간을 확인하세요'); return false; } }
+function recordAttempt(q, r, elapsedMs){
+  if(r==='un') return;                 // 미확인은 시도로 치지 않음
+  const o=loadStats(), id=getQid(q);
+  const s=o[id]||{a:0,c:0,e:0};
+  s.a+=1; if(r==='ok') s.c+=1; s.e+=Math.round(elapsedMs||0);
+  o[id]=s; saveStats(o);
+  try{ const d=loadDaily(), day=todayStr(); const e=d[day]||{a:0,c:0}; e.a+=1; if(r==='ok') e.c+=1; d[day]=e; saveDaily(d); }catch{}
+}
+function cumulative(){
+  const o=loadStats(); let a=0,c=0,e=0,n=0;
+  for(const k in o){ a+=o[k].a; c+=o[k].c; e+=o[k].e; n++; }
+  return {attempts:a, correct:c, elapsed:e, questions:n};
+}
+
+// ─────────── HELPERS ───────────
+// 교수명 '이름만': meta 교수란('YYYY · [과/교실] 이름')에서 과/교실 토큰을 떼고 이름만. (과목 무관)
+const DEPT_RE=/^(\S{2,}(?:과|교실))\s+(.+)$/;
+function profSeg(meta){ return (String(meta||'').split('·').pop()||'').trim(); }
+function getProf(meta){ const s=profSeg(meta), m=s.match(DEPT_RE); return (m?m[2]:s).trim(); }
+function metaName(meta){ const s=String(meta||''), i=s.lastIndexOf('·'); return i<0?getProf(s):(s.slice(0,i+1)+' '+getProf(s)); }
+// 선지 마커 ①–⑳ 지원(R형: 5선지 초과). normMarker 는 마커문자/1-based 인덱스 모두 허용.
+const CIRCLED='①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
+function getOptNum(opt){ const m=String(opt||'').match(/^\s*([①-⑳])/); return m?m[1]:null; }
+function getCorrectNum(v){ const m=String(v||'').match(/^\s*([①-⑳])/); return m?m[1]:null; }
+function normMarker(x){ if(x==null) return null; const s=String(x).trim();
+  const m=s.match(/[①-⑳]/); if(m) return m[0];
+  const n=parseInt(s,10); return (!isNaN(n)&&n>=1&&n<=CIRCLED.length)?CIRCLED[n-1]:null; }
+// 정답 마커 Set: answers(복수정답) 우선, 없으면 verified 선두 마커(단일·기존 호환).
+function correctSet(q){ if(Array.isArray(q.answers)&&q.answers.length)
+    return new Set(q.answers.map(normMarker).filter(Boolean));
+  const cn=getCorrectNum(q.verified); return new Set(cn?[cn]:[]); }
+function isMulti(q){ return correctSet(q).size>1; }
+// 현재 선택을 마커 배열로 정규화(단일=문자열, 복수=배열).
+function asArr(s){ return Array.isArray(s)?s.slice():(s?[s]:[]); }
+const ROYAL_RE=/【킹?왕족】\s?/g;
+function isRoyal(q){ const s=q.new_expl&&(Array.isArray(q.new_expl)?q.new_expl.join(' '):q.new_expl); ROYAL_RE.lastIndex=0; return !!s&&ROYAL_RE.test(s); }
+function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtSec(ms){ const s=Math.round(ms/1000); if(s<60) return s+'초'; return Math.floor(s/60)+'분 '+(s%60)+'초'; }
+
+// ─────────── FILTER STATE ───────────
+const STEPS=['범위','연도','교수'];
+let mode='study';
+let fs={step:0, scopes:new Set(), years:new Set(), profs:new Set(), flagOnly:false, royalOnly:false};
+let shuffleOn=false, hideInfo=false, timerOn=false;
+const PREF_KEY=STORAGE_KEY+'_prefs';
+const DAILY_KEY=STORAGE_KEY+'_daily';     // 일별 정답률(추세)
+const SESS_KEY=STORAGE_KEY+'_session';    // 진행 중 세션(이어풀기)
+const PER_Q_SEC=60;                       // 시험 제한시간: 문항당 초
+let examTimer=null, examDeadline=0;
+function loadPrefs(){ try{ const p=JSON.parse(localStorage.getItem(PREF_KEY)||'{}'); shuffleOn=!!p.shuffle; hideInfo=!!p.hide; timerOn=!!p.timer; }catch{} }
+function savePrefs(){ try{ localStorage.setItem(PREF_KEY, JSON.stringify({...loadPrefsRaw(), shuffle:shuffleOn, hide:hideInfo, timer:timerOn})); }catch{} }
+function shuffleArr(a){ const r=a.slice(); for(let i=r.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [r[i],r[j]]=[r[j],r[i]]; } return r; }
+function toggleOpt(k){ if(k==='shuffle') shuffleOn=!shuffleOn; else if(k==='hide') hideInfo=!hideInfo; else if(k==='timer') timerOn=!timerOn; savePrefs(); renderOptToggles(); }
+function renderOptToggles(){
+  const set=(id,st,on)=>{ const b=document.getElementById(id); if(b){ b.classList.toggle('on',on); document.getElementById(st).textContent=on?'ON':'OFF'; } };
+  set('tg-shuffle','st-shuffle',shuffleOn); set('tg-hide','st-hide',hideInfo); set('tg-timer','st-timer',timerOn);
+}
+
+function setMode(m){ mode=m; document.querySelectorAll('.mode-tab').forEach(t=>t.classList.toggle('on', t.dataset.mode===m)); }
+function scopesInData(){ return [...new Set(ALL_Q.map(q=>q.scope))].sort((a,b)=>SCOPE_ORDER.indexOf(a)-SCOPE_ORDER.indexOf(b)); }
+function yearsInData(qs){ return [...new Set(qs.flatMap(q=>q.years||[]))].sort(); }
+function profsInData(qs){ return [...new Set(qs.map(q=>getProf(q.meta)))].sort(); }
+function filteredByScope(){ let qs=ALL_Q; if(fs.flagOnly) qs=qs.filter(q=>isFlag(q)); if(fs.royalOnly) qs=qs.filter(q=>isRoyal(q)); if(fs.scopes.size>0) qs=qs.filter(q=>fs.scopes.has(q.scope)); return qs; }
+function filteredByScopeYear(){ let qs=filteredByScope(); if(fs.years.size>0) qs=qs.filter(q=>(q.years||[]).some(y=>fs.years.has(y))); return qs; }
+function filteredAll(){ let qs=filteredByScopeYear(); if(fs.profs.size>0) qs=qs.filter(q=>fs.profs.has(getProf(q.meta))); return qs; }
+
+function renderFilter(){ renderStepInd(); renderSumRow(); renderStepPanel(); renderFilterFooter(); refreshResumeBtn(); }
+function renderStepInd(){
+  document.getElementById('step-ind').innerHTML=STEPS.map((name,i)=>{
+    const done=i<fs.step, cur=i===fs.step;
+    return `<div class="step-item"><div class="sdot ${done?'done':cur?'cur':''}" onclick="jumpStep(${i})">${done?'✓':i+1}</div>
+      <span class="slbl ${done?'done':cur?'cur':''}">${name}</span></div>${i<STEPS.length-1?'<span class="sarr">›</span>':''}`;
+  }).join('');
+}
+function jumpStep(i){ if(i>=fs.step) return; fs.step=i;
+  if(i<=0){ fs.scopes=new Set(); fs.flagOnly=false; fs.royalOnly=false; } if(i<=1) fs.years=new Set(); if(i<=2) fs.profs=new Set(); renderFilter(); }
+function renderSumRow(){
+  const parts=[];
+  if(fs.step>0){ let label; if(fs.flagOnly) label='🚩 체크 문항';
+    else { label=fs.scopes.size===0?'전체':[...fs.scopes].map(s=>s.split('.')[0].trim()).join(', '); if(fs.royalOnly) label='🔥 '+label; }
+    parts.push({lbl:'범위',val:label,step:0}); }
+  if(fs.step>1){ const label=fs.years.size===0?'전체':[...fs.years].join(', '); parts.push({lbl:'연도',val:label,step:1}); }
+  document.getElementById('sum-row').innerHTML=parts.map(p=>`<div class="sum-pill" onclick="jumpStep(${p.step})">
+      <span class="sp-lbl">${p.lbl}</span><span class="sp-val">${esc(p.val)}</span><span class="sp-x">✕</span></div>`).join('');
+}
+function renderStepPanel(){
+  const el=document.getElementById('step-panel');
+  if(fs.step===0){
+    const scopes=scopesInData(), scopeMeta=scopeMetaMap(ALL_Q);
+    const flagCount=ALL_Q.filter(q=>isFlag(q)).length;
+    el.innerHTML=`<div class="step-q">어떤 범위를 풀까요?</div>
+      <div class="step-note">복수 선택 가능 · 선택 없이 다음을 누르면 전체</div>
+      <div class="chips">
+        ${flagCount>0?`<div class="chip flag-chip${fs.flagOnly?' on':''}" onclick="toggleFlagOnly(this)">🚩 체크 문항만 (${flagCount})</div>`:''}
+        ${ALL_Q.some(isRoyal)?`<div class="chip flag-chip${fs.royalOnly?' on':''}" onclick="toggleRoyalOnly(this)" title="고빈출(왕족) 문항만 — 빈출순 정렬">🔥 왕족(빈출)만 (${ALL_Q.filter(isRoyal).length})</div>`:''}
+        ${scopes.map(s=>{ const status=scopeMeta.get(s)?.status;
+          const text=status==='changed'?'교수교체':status==='new'?'신설':status==='closed'?'미개설':'';
+          const badge=text?` <span class="badge b-gray">${text}</span>`:'';
+          return `<div class="chip${fs.scopes.has(s)&&!fs.flagOnly?' on':''}" onclick="toggleChip(this,'scope','${escJs(s)}')">${esc(s)}${badge}</div>`; }).join('')}
+      </div>`;
+  } else if(fs.step===1){
+    const years=yearsInData(filteredByScope());
+    el.innerHTML=`<div class="step-q">어느 연도 문항을 풀까요?</div>
+      <div class="step-note">복수 선택 가능 · 선택 없이 다음을 누르면 전체 연도</div>
+      <div class="chips">${years.map(y=>`<div class="chip${fs.years.has(y)?' on':''}" onclick="toggleChip(this,'year','${y}')">${y}년</div>`).join('')}</div>`;
+  } else if(fs.step===2){
+    const profs=profsInData(filteredByScopeYear());
+    el.innerHTML=`<div class="step-q">출제 교수를 선택하세요</div>
+      <div class="step-note">복수 선택 가능 · 선택 없이 시작하면 전체 교수</div>
+      <div class="chips">${profs.map(p=>`<div class="chip${fs.profs.has(p)?' on':''}" onclick="toggleChip(this,'prof','${escJs(p)}')">${esc(p)}</div>`).join('')}</div>`;
+  }
+}
+function toggleFlagOnly(el){ fs.flagOnly=!fs.flagOnly;
+  if(fs.flagOnly){ fs.scopes=new Set(); el.classList.add('on'); } else el.classList.remove('on');
+  document.querySelectorAll('#step-panel .chip:not(.flag-chip)').forEach(c=>c.classList.remove('on')); renderFilterFooter(); }
+function toggleRoyalOnly(el){ fs.royalOnly=!fs.royalOnly; el.classList.toggle('on',fs.royalOnly); renderFilterFooter(); }   // 범위 선택과 병용 가능
+function escJs(s){ return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function toggleChip(el,type,val){
+  if(type==='scope'&&fs.flagOnly) return;
+  const s=type==='scope'?fs.scopes:type==='year'?fs.years:fs.profs;
+  if(s.has(val)){ s.delete(val); el.classList.remove('on'); } else { s.add(val); el.classList.add('on'); }
+  renderFilterFooter();
+}
+function renderFilterFooter(){
+  const n=filteredAll().length;
+  document.getElementById('f-count').textContent=n+'문항';
+  document.getElementById('btn-fp').disabled=(fs.step===0);
+  const isLast=(fs.step===STEPS.length-1); const fn=document.getElementById('btn-fn');
+  fn.textContent=isLast?'시작하기 →':'다음 →'; fn.disabled=(isLast&&n===0);
+}
+function fPrev(){ if(fs.step>0){ fs.step--; renderFilter(); } }
+function fNext(){ if(fs.step<STEPS.length-1){ fs.step++; renderFilter(); } else startQuiz(); }
+
+// ─────────── 설정/리셋 모달 ───────────
+function openSettings(){
+  document.getElementById('rs-flag-cnt').textContent=loadFlags().size+'개';
+  const cum=cumulative();
+  document.getElementById('rs-stat-cnt').textContent=cum.attempts+'회';
+  document.getElementById('rs-flag-btn').disabled=loadFlags().size===0;
+  document.getElementById('rs-stat-btn').disabled=cum.attempts===0&&Object.keys(loadSched().q).length===0;
+  cancelReset('flag'); cancelReset('stat');
+  renderConfToggle(); renderFontButtons();
+  document.getElementById('modal-bg').classList.add('on');
+}
+function toggleConf(){ const s=loadSched(); s.conf=!s.conf; saveSched(s); renderConfToggle(); }
+function renderConfToggle(){
+  const b=document.getElementById('tg-conf'); if(!b) return;
+  const on=loadSched().conf!==false; b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on));
+  document.getElementById('st-conf').textContent=on?'ON':'OFF';
+}
+/* 글자 크기 S/M/L — CSS 는 html[data-font] 하나만 보고 --fs 배율을 바꾼다. */
+function applyFont(f){ document.documentElement.dataset.font=normFont(f); }
+function fontSize(f){ const s=loadSched(); s.font=normFont(f); saveSched(s); applyFont(s.font); renderFontButtons(); }
+function renderFontButtons(){
+  const cur=normFont(loadSched().font);
+  document.querySelectorAll('#fs-row .opt-tg').forEach(b=>{
+    const on=b.dataset.font===cur;
+    b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on));
+  });
+}
+function closeSettings(){ document.getElementById('modal-bg').classList.remove('on'); }
+function askReset(k){ document.getElementById('rs-'+k+'-confirm').style.display='flex'; document.getElementById('rs-'+k+'-btn').style.display='none'; }
+function cancelReset(k){ const c=document.getElementById('rs-'+k+'-confirm'); if(c) c.style.display='none'; const b=document.getElementById('rs-'+k+'-btn'); if(b) b.style.display='block'; }
+function doReset(k){
+  try{ if(k==='flag') localStorage.removeItem(FLAG_KEY);
+    else { const sched=loadSched(); localStorage.removeItem(STAT_KEY); localStorage.removeItem(DAILY_KEY); localStorage.removeItem(SESS_KEY); saveSched({...sched,q:{}}); } }catch{}
+  openSettings();
+}
+document.getElementById('modal-bg').addEventListener('click',e=>{ if(e.target.id==='modal-bg') closeSettings(); });
+
+// ─────────── QUIZ STATE ───────────
+let QS=[], qi=0, results={}, selOpt=null, examSels={}, graded=false;
+let sessElapsed={};   // qi -> ms (이번 세션 풀이시간)
+let qEnter=0;         // 현재 문항 진입 시각
+
+function flushTime(){ if(QS.length && qEnter){ sessElapsed[qi]=(sessElapsed[qi]||0)+(Date.now()-qEnter); qEnter=Date.now(); } }
+
+// 정렬: 셔플 우선, 아니면 왕족모드일 때 빈출순(years 많은 순), 아니면 원순서
+function orderQS(list){
+  if(shuffleOn) return shuffleArr(list);
+  if(fs.royalOnly) return list.slice().sort((a,b)=>((b.years||[]).length)-((a.years||[]).length));
+  return list.slice();
+}
+function applyModeChrome(){
+  document.getElementById('h-mode-badge').textContent=mode==='exam'?'📝':'📖';
+  document.getElementById('exam-banner').style.display=(mode==='exam'&&!graded)?'block':'none';
+  document.getElementById('btn-grade').style.display=(mode==='exam'&&!graded)?'inline-block':'none';
+  document.getElementById('btn-end').style.display=mode==='study'?'inline-block':'none';
+  document.getElementById('si-ans').style.display=mode==='exam'?'flex':'none';
+}
+function startSessionWith(list){
+  if(!list||!list.length) return false;
+  QS=orderQS(list); qi=0; results={}; selOpt=null; examSels={}; graded=false; sessElapsed={};
+  applyModeChrome(); startTimer();
+  show('screen-quiz'); qEnter=Date.now(); renderQ(); saveSession();
+  return true;
+}
+function startQuiz(){ startSessionWith(filteredAll()); }
+function goFilter(){ stopTimer(); show('screen-filter'); renderFilter(); }
+
+// ── 약점 집중 출제: 오답률·🚩·빈출 가중으로 약한 문항 우선 N개 ──────────────
+function weaknessList(n){
+  const stats=loadStats(), flags=loadFlags();
+  const scored=ALL_Q.map(q=>{
+    const id=getQid(q), s=stats[id]; let score;
+    if(s&&s.a){ score=(1-s.c/s.a)*3+0.3; }   // 정답이력 있으면 오답률 위주(0.3~3.3)
+    else { score=1.0; }                        // 미시도: 중간 가중(노출은 시키되 과다하지 않게)
+    if(isRoyal(q)) score+=0.6;                 // 빈출 가산(특히 미시도 고수율 우선)
+    if(flags.has(id)) score+=1.5;              // 🚩 체크 가산
+    return {q, score, r:Math.random()};
+  });
+  scored.sort((a,b)=>(b.score-a.score)||(b.r-a.r));   // 점수 desc, 동점 무작위
+  return scored.slice(0, n||Math.min(20,ALL_Q.length)).map(x=>x.q);
+}
+function startWeak(){
+  fs.royalOnly=false;                          // 약점순(weakest-first) 정렬 보존(royal 재정렬 방지)
+  if(!startSessionWith(weaknessList(Math.min(20,ALL_Q.length)))) alert('출제할 문항이 없습니다.');
+}
+
+// ── 이미지 라이트박스(클릭 확대) ─────────────────────────────────────────────
+function openLightbox(src){ document.getElementById('lightbox-img').src=src; document.getElementById('lightbox').classList.add('on'); }
+function closeLightbox(){ const lb=document.getElementById('lightbox'); if(!lb.classList.contains('on')) return false;
+  lb.classList.remove('on'); document.getElementById('lightbox-img').src=''; return true; }
+
+// ── 진도 백업: export/import. 과목 키 버전이 바뀌어도 복원되게 suffix 기준으로 저장/복원 ──
+const PROGRESS_SUFFIXES=['_stats','_flagged','_daily','_session','_prefs'];
+function exportProgress(){
+  const out={_meta:{storageKey:STORAGE_KEY, subject:APP_DATA.subject, exportedAt:new Date().toISOString()}, data:{}};
+  PROGRESS_SUFFIXES.forEach(sx=>{ const v=localStorage.getItem(STORAGE_KEY+sx); if(v!=null) out.data[sx]=v; });
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=STORAGE_KEY+'_progress_'+todayStr()+'.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+function importProgress(file){
+  const msg=document.getElementById('imp-msg'); if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+      const obj=JSON.parse(r.result), d=obj.data||{}, src=obj._meta&&obj._meta.storageKey;
+      let n=0; PROGRESS_SUFFIXES.forEach(sx=>{ if(typeof d[sx]==='string'){ localStorage.setItem(STORAGE_KEY+sx, d[sx]); n++; } });
+      openSettings();                          // 카운트 갱신
+      msg.style.display='block'; msg.style.color=n?'var(--ok)':'var(--ng)';
+      msg.textContent=(src&&src!==STORAGE_KEY?`⚠ 다른 키(${src}) 백업 → 현재 과목에 복원. `:'')
+        +(n?`복원 완료(${n}항목). 새로고침하면 반영됩니다.`:'복원할 항목이 없습니다.');
+    }catch(e){ msg.style.display='block'; msg.style.color='var(--ng)'; msg.textContent='불러오기 실패 — 올바른 백업 JSON이 아닙니다.'; }
+  };
+  r.readAsText(file);
+}
+
+// ─────────── 시험 카운트다운 타이머 ───────────
+function fmtClock(ms){ const s=Math.max(0,Math.round(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function startTimer(){
+  stopTimer(); const el=document.getElementById('exam-timer');
+  if(mode!=='exam'||!timerOn||!QS.length||graded){ if(el) el.style.display='none'; return; }
+  examDeadline=Date.now()+QS.length*PER_Q_SEC*1000;
+  if(el) el.style.display='inline-block';
+  tickTimer(); examTimer=setInterval(tickTimer,1000);
+}
+function tickTimer(){
+  const el=document.getElementById('exam-timer'); if(!el) return;
+  const left=examDeadline-Date.now();
+  el.textContent='⏱ '+fmtClock(left); el.classList.toggle('warn',left<=60000);
+  if(left<=0){ stopTimer(); el.textContent='⏱ 0:00'; if(!graded&&mode==='exam') gradeExam(); }
+}
+function stopTimer(){ if(examTimer){ clearInterval(examTimer); examTimer=null; } }
+
+// ─────────── 문항 검색 ───────────
+// NFC 정규화: PDF 추출 텍스트는 NFD(자모 분해) 한글일 수 있어, 키보드 입력(NFC)과 같은
+// 글자여도 includes 매칭이 실패한다. 검색 대상·검색어 양쪽을 NFC 로 맞춘다.
+function qSearchText(q){ return [q.stem, (q.options||[]).join(' '),
+  Array.isArray(q.new_expl)?q.new_expl.join(' '):(q.new_expl||''), q.verified||''].join(' ').normalize('NFC').toLowerCase(); }
+function runSearch(){
+  const term=(document.getElementById('q-search').value||'').trim();
+  const emptyEl=document.getElementById('search-empty');
+  if(!term){ emptyEl.style.display='none'; return; }
+  const t=term.normalize('NFC').toLowerCase();
+  const matches=ALL_Q.filter(q=>qSearchText(q).includes(t));
+  if(!matches.length){ emptyEl.textContent='“'+term+'” 검색 결과 없음'; emptyEl.style.display='block'; return; }
+  emptyEl.style.display='none'; fs.royalOnly=false; startSessionWith(matches);
+}
+
+// ─────────── 이어풀기(세션 저장·복원) ───────────
+function saveSession(){ try{ if(!QS.length) return;
+  localStorage.setItem(SESS_KEY, JSON.stringify({mode, ids:QS.map(getQid), qi, results, examSels, sessElapsed, graded})); }catch{} }
+function loadSession(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch{ return null; } }
+function clearSession(){ try{ localStorage.removeItem(SESS_KEY); }catch{} }
+function refreshResumeBtn(){ const b=document.getElementById('btn-resume'); if(!b) return;
+  const s=loadSession();
+  if(s&&s.ids&&s.ids.length&&!s.graded){ b.style.display='inline-block'; b.textContent='↩ 이어풀기 ('+((s.qi||0)+1)+'/'+s.ids.length+')'; }
+  else b.style.display='none';
+}
+function resumeSession(){ const s=loadSession(); if(!s||!s.ids){ refreshResumeBtn(); return; }
+  const map=new Map(ALL_Q.map(q=>[getQid(q),q]));
+  const list=s.ids.map(id=>map.get(id)).filter(Boolean);
+  if(list.length!==s.ids.length||!list.length){ clearSession(); refreshResumeBtn(); return; }
+  mode=s.mode||'study'; setMode(mode);
+  QS=list; qi=Math.min(s.qi||0,QS.length-1);
+  results=s.results||{}; examSels=s.examSels||{}; sessElapsed=s.sessElapsed||{}; graded=!!s.graded; selOpt=null;
+  applyModeChrome(); startTimer(); // 이어풀기한 시험도 제한시간 유지(미호출 시 무제한 시험이 됨)
+  show('screen-quiz'); qEnter=Date.now(); renderQ();
+}
+
+// ─────────── 일별 정답률(추세) ───────────
+function loadDaily(){ try{ return JSON.parse(localStorage.getItem(DAILY_KEY)||'{}'); }catch{ return {}; } }
+function saveDaily(o){ try{ localStorage.setItem(DAILY_KEY, JSON.stringify(o)); }catch{} }
+function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// ─────────── 대시보드 → 약점 범위 바로 풀기 ───────────
+function drillScope(name){
+  fs={step:3, scopes:new Set([name]), years:new Set(), profs:new Set(), flagOnly:false, royalOnly:false};
+  startSessionWith(ALL_Q.filter(q=>q.scope===name));
+}
+
+// ─────────── 누적 통계 대시보드 (범위별 정답률 등) ───────────
+function goDash(){ show('screen-dash'); renderDash(); }
+function _accColor(p){ return p>=80?'var(--ok)':p>=50?'var(--flag)':'var(--ng)'; }
+function dashRow(name, v, clickScope){
+  const cls='dash-row'+(clickScope?' clickable':'');
+  const onclk=clickScope?` onclick="drillScope('${escJs(clickScope)}')"`:'';
+  const go=clickScope?'<span class="dr-go">▶ 풀기</span>':'';
+  if(v.att===0)   // 아직 안 푼 범위/교수 — 커버리지 가시화 위해 흐리게 표시
+    return `<div class="${cls}"${onclk} style="opacity:.55"><div class="dr-top"><span class="dr-name">${esc(name)}</span>`
+      + `<span class="dr-pct" style="color:var(--sub)">—</span></div>`
+      + `<div class="dr-meta"><span>미응시</span><span>전체 ${v.total}문항</span>${v.fl?`<span>🚩 ${v.fl}</span>`:''}${go}</div></div>`;
+  const p=Math.round(v.c/v.a*100), col=_accColor(p), avg=fmtSec(v.e/v.a);
+  return `<div class="${cls}"${onclk}>
+    <div class="dr-top"><span class="dr-name">${esc(name)}</span><span class="dr-pct" style="color:${col}">${p}%</span></div>
+    <div class="dr-bar"><div class="dr-fill" style="width:${p}%;background:${col}"></div></div>
+    <div class="dr-meta"><span>진행 ${v.att}/${v.total}</span><span>정답 ${v.c}/${v.a}</span><span>평균 ${avg}</span>${v.fl?`<span>🚩 ${v.fl}</span>`:''}${go}</div>
+  </div>`;
+}
+function trendHTML(){
+  const daily=loadDaily();
+  const days=Object.keys(daily).filter(k=>daily[k]&&daily[k].a>0).sort().slice(-14);
+  if(days.length<2) return '';
+  let bars='';
+  for(const day of days){ const e=daily[day], p=Math.round(e.c/e.a*100), col=_accColor(p);
+    bars+=`<div class="trend-bar" title="${day} · ${p}% (${e.c}/${e.a})"><div class="tb-col"><div class="tb-fill" style="height:${Math.max(p,3)}%;background:${col}"></div></div><div class="tb-day">${day.slice(5)}</div></div>`;
+  }
+  return '<div class="dash-sec">최근 정답률 추세 ('+days.length+'일)</div><div class="trend-wrap">'+bars+'</div>';
+}
+function renderDash(){
+  dbRenderV2();
+  document.getElementById('dash-sub').textContent = APP_DATA.subject + ' · ' + ALL_Q.length + '문항';
+  const stats=loadStats(), flags=loadFlags();
+  const byScope=new Map(), byProf=new Map();
+  const get=(m,k)=>{ if(!m.has(k)) m.set(k,{total:0,att:0,a:0,c:0,e:0,fl:0}); return m.get(k); };
+  let tA=0,tC=0,tE=0,covered=0;
+  for(const q of ALL_Q){
+    const id=getQid(q), s=stats[id];
+    const sc=get(byScope,q.scope), pr=get(byProf, getProf(q.meta)||'(미상)');
+    sc.total++; pr.total++;
+    if(flags.has(id)){ sc.fl++; pr.fl++; }
+    if(s && s.a>0){ sc.att++; sc.a+=s.a; sc.c+=s.c; sc.e+=s.e;
+      pr.att++; pr.a+=s.a; pr.c+=s.c; pr.e+=s.e; tA+=s.a; tC+=s.c; tE+=s.e; covered++; }
+  }
+  const body=document.getElementById('dash-body');
+  if(tA===0){ body.innerHTML='<div class="dash-empty">아직 풀이 이력이 없습니다.<br>학습/시험 모드로 문항을 풀면 범위별 정답률이 여기에 쌓입니다.</div>'; return; }
+  const pct=Math.round(tC/tA*100);
+  let html=`<div class="dash-sum">
+    <div class="dash-cell"><div class="dc-num" style="color:${_accColor(pct)}">${pct}%</div><div class="dc-lbl">전체 정답률</div></div>
+    <div class="dash-cell"><div class="dc-num">${tC}/${tA}</div><div class="dc-lbl">정답 / 시도</div></div>
+    <div class="dash-cell"><div class="dc-num">${covered}/${ALL_Q.length}</div><div class="dc-lbl">푼 문항</div></div>
+  </div>
+  <div class="dr-meta" style="justify-content:center;margin-bottom:2px">누적 풀이시간 ${fmtSec(tE)} · 정답률은 '확인한 시도' 기준</div>`;
+  html+=trendHTML();   // 최근 정답률 추세(데이터 2일 이상)
+  // 범위별 — SCOPE_ORDER 순서(없는 scope 는 뒤에), 미응시 포함. 행 클릭 → 그 범위 바로 풀기.
+  const scopes=SCOPE_ORDER.filter(s=>byScope.has(s));
+  for(const s of byScope.keys()) if(!scopes.includes(s)) scopes.push(s);
+  html+='<div class="dash-sec">범위별 정답률 <span style="font-weight:400">· 클릭하면 그 범위 바로 풀기</span></div>';
+  for(const name of scopes) html+=dashRow(name, byScope.get(name), name);
+  // 교수별 — 푼 것만, 정답률 낮은 순(약점 우선)
+  const profs=[...byProf.entries()].filter(([,v])=>v.att>0).sort((x,y)=>x[1].c/x[1].a - y[1].c/y[1].a);
+  if(profs.length>1){
+    html+='<div class="dash-sec">교수별 정답률 (낮은 순)</div>';
+    for(const [name,v] of profs) html+=dashRow(name, v);
+  }
+  body.innerHTML=html;
+}
+function isLocked(r){ return r==='ok'||r==='ng'||r==='sk'; }   // un/undefined 은 재응답 가능
+
+function renderQ(){
+  renderDots(); renderStrip(); renderProg();
+  const q=QS[qi]; const r=results[qi]; const locked=isLocked(r); const examSel=examSels[qi];
+  const opts=q.options||[]; const subjective=opts.length===0;   // ★주관식(보기 없음) 가드
+  const flagOn=isFlag(q);
+  const confidenceOn=loadSched().conf!==false;
+  const showMeta=!hideInfo||(mode==='exam'?graded:locked);
+  document.getElementById('quiz-body').innerHTML=`
+    <div class="sec-badge" id="sec-badge"${showMeta?'':' style="display:none"'}>${esc(q.scope)}</div>
+    <div class="card">
+      <div class="card-top">
+        <div class="meta-row" id="meta-row">
+          ${showMeta?metaHTML(q):'<span class="badge b-gray" style="opacity:.55">🙈 정보 가림</span>'}
+        </div>
+        <button class="btn-flag${flagOn?' on':''}" id="btn-flag" onclick="clickFlag()" title="오답 체크">🚩</button>
+      </div>
+      <div class="q-num">Q${qi+1} / ${QS.length}${r==='un'?' · <span style="color:var(--un)">미확인</span>':''}</div>
+      <div class="q-stem">${esc(q.stem)}</div>
+      ${q.image?`<div class="stem-img"><img src="${q.image}" alt="문항 이미지" decoding="async" onclick="openLightbox(this.src)">${q.image_caption?`<div class="cap">${esc(q.image_caption)}</div>`:''}</div>`:''}
+      ${Array.isArray(q.images)?q.images.map((src,ii)=>`<div class="stem-img"><img src="${src}" alt="문항 이미지 ${ii+1}" decoding="async" onclick="openLightbox(this.src)">${(q.image_captions&&q.image_captions[ii])?`<div class="cap">${esc(q.image_captions[ii])}</div>`:''}</div>`).join(''):''}
+      ${q.image_missing&&!q.image&&!(Array.isArray(q.images)&&q.images.length)?`<div class="stem-img"><div class="cap">[이미지 누락]</div></div>`:''}
+      ${isMulti(q)?`<div class="q-hint">☑ 복수 정답 — 정답을 모두 고르시오 (${correctSet(q).size}개)</div>`:''}
+      ${subjective?`<div class="q-hint wide">✏️ 주관식 — 답을 떠올린 뒤 ${mode==='study'?"'정답 확인'":'채점'} 시 정답이 공개됩니다.</div>`:''}
+      <div class="options" id="opts">
+        ${opts.map((o,i)=>{
+          let cls='opt'; const on=getOptNum(o);
+          if(locked){ if(correctSet(q).has(on)) cls+=' ok'; }
+          else if(mode==='exam'&&asArr(examSel).includes(on)) cls+=' sel';
+          return `<button class="${cls}" data-num="${on}" onclick="selectOpt(this)" ${locked?'disabled':''}>
+            <span class="opt-key">${i+1}</span>${esc(o)}</button>`;
+        }).join('')}
+      </div>
+      ${mode==='study'&&!locked?`
+        <div class="action-row">
+          ${subjective||!confidenceOn
+            ?'<button class="btn-reveal" onclick="reveal(2)">정답 확인</button>'
+            :'<button class="conf-btn" data-conf="3" onclick="reveal(3)">확신 (A)</button><button class="conf-btn" data-conf="2" onclick="reveal(2)">반반 (S)</button><button class="conf-btn" data-conf="1" onclick="reveal(1)">찍음 (D)</button>'}
+          <button class="btn-skip" onclick="skip()">건너뜀</button>
+        </div>
+        <div class="kbd-hint">${subjective?'':`<kbd>1</kbd>–<kbd>${Math.min(9,opts.length)}</kbd> 선지${isMulti(q)?'(복수)':''} &nbsp; `}<kbd>Space</kbd> 정답확인 &nbsp; <kbd>←</kbd><kbd>→</kbd> 이동</div>`
+      : mode==='exam'&&!subjective?`<div class="kbd-hint"><kbd>1</kbd>–<kbd>${Math.min(9,opts.length)}</kbd> 선지 선택${isMulti(q)?'(복수)':''} &nbsp; <kbd>←</kbd><kbd>→</kbd> 이동</div>`
+      : ''}
+    </div>
+    <div id="expl-area"></div>
+    <div class="nav-row" style="margin-top:4px">
+      <button class="btn-nav" onclick="go(-1)" ${qi===0?'disabled':''}>← 이전</button>
+      ${qi<QS.length-1
+        ?'<button class="btn-nav primary" onclick="go(1)">다음 →</button>'
+        : mode==='study'
+          ?'<button class="btn-nav primary" onclick="endSession()">결과 보기 📊</button>'
+          :'<button class="btn-nav primary" onclick="gradeExam()">채점하기 📊</button>'}
+    </div>`;
+  if(locked) showExpl(q, r, loadSched().q[getQid(q)]?.h?.[0]?.[2]);
+  if(!locked) selOpt=null;
+  saveSession();              // 진도 저장(이어풀기)
+  window.scrollTo(0,0);
+}
+
+function badgeCnt(q){
+  const yrs=q.years||[]; const n=yrs.length, cls=n>=4?'b-royal':n>=2?'b-blue':'b-gray';
+  const label=n===0?'(연도 미확인)':n===1?`출제 1회 (${yrs[0]})`:`출제 ${n}회 (${yrs.join(', ')})`;
+  return `<span class="badge ${cls}">${esc(label)}</span>`; // years 는 데이터 유래 — esc 규율 유지
+}
+function metaHTML(q){ return `<span class="badge b-gray">${esc(metaName(q.meta))}</span>${badgeCnt(q)}${isRoyal(q)?'<span class="badge b-royal">👑 왕족</span>':''}`; }
+const DOT_SPAN=10;   // 현재 문항 기준 앞뒤 노출 개수(문항 많아도 한 줄 유지)
+function renderDots(){
+  const el=document.getElementById('qdots'); el.innerHTML='';
+  const n=QS.length;
+  // 현재 문항을 가운데 두는 21칸 창. 양끝에선 창을 밀어 항상 같은 개수를 보여준다.
+  let s=qi-DOT_SPAN, e=qi+DOT_SPAN;
+  if(s<0){ e-=s; s=0; }
+  if(e>n-1){ s-=e-(n-1); e=n-1; }
+  if(s<0) s=0;
+  const goTo=i=>{ flushTime(); qi=i; qEnter=Date.now(); renderQ(); };
+  const mkDot=i=>{
+    const q=QS[i], r=results[i], examSel=examSels[i]; let cls='qdot';
+    if(i===qi) cls+=' cur';
+    else if(r==='ok') cls+=' ok'; else if(r==='ng') cls+=' ng';
+    else if(r==='sk') cls+=' sk'; else if(r==='un') cls+=' un';
+    else if(mode==='exam'&&examSel) cls+=' answered';
+    const flagPip=isFlag(q)?'<span class="flag-pip"></span>':'';
+    const d=document.createElement('div'); d.className=cls; d.innerHTML=`${i+1}${flagPip}`;
+    d.onclick=()=>goTo(i);
+    return d;
+  };
+  const mkGap=(target,title)=>{
+    const g=document.createElement('div'); g.className='qgap'; g.textContent='…'; g.title=title;
+    g.onclick=()=>goTo(target);
+    return g;
+  };
+  // 창 밖으로 나간 구간은 첫/끝 문항 + '…'(한 창만큼 점프)로 대체 — 먼 곳으로도 이동 가능.
+  if(s>0){
+    el.appendChild(mkDot(0));
+    if(s>1) el.appendChild(mkGap(Math.max(0,qi-2*DOT_SPAN-1),'앞으로 이동'));
+  }
+  for(let i=s;i<=e;i++) el.appendChild(mkDot(i));
+  if(e<n-1){
+    if(e<n-2) el.appendChild(mkGap(Math.min(n-1,qi+2*DOT_SPAN+1),'뒤로 이동'));
+    el.appendChild(mkDot(n-1));
+  }
+  // 좁은 화면에서 줄이 넘칠 때 현재 문항이 보이도록 가로 스크롤 위치 보정.
+  const cur=el.querySelector('.qdot.cur');
+  if(cur) el.scrollLeft=cur.offsetLeft-(el.clientWidth-cur.offsetWidth)/2;
+}
+function renderStrip(){
+  if(mode==='exam'&&!graded){ document.getElementById('sc-ans').textContent=Object.keys(examSels).length; return; }
+  const v=Object.values(results);
+  document.getElementById('sc-ok').textContent=v.filter(x=>x==='ok').length;
+  document.getElementById('sc-ng').textContent=v.filter(x=>x==='ng').length;
+  document.getElementById('sc-sk').textContent=v.filter(x=>x==='sk').length;
+}
+function renderProg(){
+  document.getElementById('prog-text').textContent=`${qi+1}/${QS.length}`;
+  document.getElementById('prog-fill').style.width=`${((qi+1)/QS.length)*100}%`;
+  const showMeta=!hideInfo||(mode==='exam'?graded:isLocked(results[qi]));
+  document.getElementById('h-sub').textContent=showMeta?QS[qi].scope:'🙈 가림';
+}
+function selectOpt(btn){
+  if(isLocked(results[qi])) return;
+  const q=QS[qi], num=btn.dataset.num;
+  if(isMulti(q)){            // 복수정답: 토글(체크박스식). 다른 선택 유지.
+    const base=mode==='exam'?asArr(examSels[qi]):asArr(selOpt);
+    const cur=base.includes(num)?base.filter(x=>x!==num):[...base,num];
+    selOpt=cur;
+    document.querySelectorAll('.opt').forEach(b=>b.classList.toggle('sel',cur.includes(b.dataset.num)));
+    if(mode==='exam'){ if(cur.length) examSels[qi]=cur; else delete examSels[qi]; renderDots(); renderStrip(); saveSession(); }
+  } else {                   // 단일정답: 라디오(기존 동작 유지).
+    document.querySelectorAll('.opt').forEach(b=>b.classList.remove('sel'));
+    btn.classList.add('sel'); selOpt=num;
+    if(mode==='exam'){ examSels[qi]=selOpt; renderDots(); renderStrip(); saveSession(); }
+  }
+}
+// 선택 마커배열 vs 정답 Set 완전일치 채점. 미선택=sk.
+function judge(q,selArr){ const cs=correctSet(q);
+  if(!cs.size) return 'sk';            // 정답 확정 불가(보기 소실·주관식 등) → 채점 제외(자동오답 금지)
+  if(!selArr.length) return 'sk';
+  if(cs.size>1) return (selArr.length===cs.size && selArr.every(x=>cs.has(x)))?'ok':'ng';
+  return cs.has(selArr[0])?'ok':'ng'; }
+
+/* 학습 모드 */
+function srMode(){ return typeof jnState!=='undefined'&&jnState==='inBlock' ? 'j' : (mode==='exam'?'x':'s'); }
+function reveal(conf=2){
+  if(mode!=='study'||isLocked(results[qi])) return;
+  const q0=QS[qi];
+  if(!(q0.options&&q0.options.length)) return revealSubjective();   // ★주관식 → 자가채점
+  flushTime();
+  const q=QS[qi], cs=correctSet(q), sel=asArr(selOpt);
+  const r=judge(q, sel);
+  const partial=r==='ng'&&cs.size>1&&sel.some(x=>cs.has(x));
+  results[qi]=r;
+  srRecord(q,r,conf,srMode(),partial);
+  recordAttempt(q, r, sessElapsed[qi]||0);
+  document.querySelectorAll('.opt').forEach(b=>{ b.disabled=true; b.classList.remove('sel');
+    const on=b.dataset.num;
+    if(cs.has(on)) b.classList.add('ok'); else if(cs.size&&sel.includes(on)) b.classList.add('ng'); });
+  if(r==='ng'&&!isFlag(q)){ toggleFlag(q); updateFlagBtn(true); }
+  document.querySelector('.action-row')?.remove();
+  document.querySelector('.kbd-hint')?.remove();
+  if(hideInfo){
+    const sb=document.getElementById('sec-badge'); if(sb) sb.style.display='';
+    const mr=document.getElementById('meta-row'); if(mr) mr.innerHTML=metaHTML(q);
+    document.getElementById('h-sub').textContent=q.scope;
+  }
+  showExpl(q,r,conf); renderDots(); renderStrip(); saveSession();
+}
+// 주관식: 정답 공개 후 스스로 채점(보기 없음).
+function revealSubjective(){
+  flushTime(); const q=QS[qi];
+  const ar=document.querySelector('.action-row'); if(ar) ar.remove();
+  document.querySelector('.kbd-hint')?.remove();
+  if(hideInfo){ const sb=document.getElementById('sec-badge'); if(sb) sb.style.display='';
+    const mr=document.getElementById('meta-row'); if(mr) mr.innerHTML=metaHTML(q);
+    document.getElementById('h-sub').textContent=q.scope; }
+  showExpl(q, null);                       // '→ 정답: …' + 해설
+  document.getElementById('expl-area').insertAdjacentHTML('afterbegin',
+    `<div class="action-row" style="margin-bottom:10px">스스로 채점 →
+       <button class="btn-reveal" onclick="selfGrade('ok')">✅ 맞음</button>
+       <button class="btn-skip" onclick="selfGrade('ng')">❌ 틀림</button>
+       <button class="btn-skip" onclick="selfGrade('sk')">건너뜀</button></div>`);
+}
+function selfGrade(r){ const q=QS[qi]; results[qi]=r; srRecord(q,r,2,srMode(),false); recordAttempt(q,r,sessElapsed[qi]||0);
+  if(r==='ng'&&!isFlag(q)) toggleFlag(q);
+  renderDots(); renderStrip(); saveSession(); renderQ(); }
+function skip(){ flushTime(); results[qi]='sk'; recordAttempt(QS[qi],'sk',sessElapsed[qi]||0); renderDots(); renderStrip(); saveSession(); go(1); }
+
+/* 시험 모드 채점 */
+function gradeExam(){
+  if(mode!=='exam'||graded) return; flushTime();
+  QS.forEach((q,i)=>{ const r=judge(q, asArr(examSels[i])); results[i]=r;
+    const partial=r==='ng'&&correctSet(q).size>1&&asArr(examSels[i]).some(x=>correctSet(q).has(x));
+    srRecord(q,r,2,'x',partial);
+    recordAttempt(q, r, sessElapsed[i]||0);
+    if(r==='ng'&&!isFlag(q)) toggleFlag(q); });
+  graded=true; stopTimer(); document.getElementById('exam-timer').style.display='none';
+  document.getElementById('btn-grade').style.display='none';
+  document.getElementById('exam-banner').style.display='none';
+  document.getElementById('btn-end').style.display='inline-block';
+  document.getElementById('si-ans').style.display='none';
+  renderStrip(); renderDots(); clearSession(); showStats();   // 세션 종료 → 이어풀기 해제
+}
+
+/* 학습 모드: 결과 보기 — 미확인은 'un' (명시적 건너뜀 'sk'와 구분) */
+function endSession(){ flushTime(); stopTimer(); QS.forEach((_,i)=>{ if(!results[i]) results[i]='un'; }); clearSession(); showStats(); }
+
+function bulletize(expl){
+  if(Array.isArray(expl)) return '<ul>'+expl.map(x=>`<li>${esc(String(x).replace(ROYAL_RE,'').trim())}</li>`).join('')+'</ul>';
+  return esc(String(expl).replace(ROYAL_RE,''));
+}
+function showExpl(q,r,conf){
+  const hc=r==='ng'&&conf===3?'<div class="hc-banner">확신했는데 틀렸습니다 — 최우선 복습 대상으로 표시합니다</div>':'';
+  const banner=r==='ok'?`<div class="result-banner rb-ok">✓ 정답입니다!<span class="rb-time">⏱ 내 풀이 ${fmtSec(sessElapsed[qi]||0)}</span></div>`
+    :r==='ng'?`<div class="result-banner rb-ng">✗ 오답. 정답: ${esc(q.verified)}<span class="rb-time">⏱ 내 풀이 ${fmtSec(sessElapsed[qi]||0)}</span></div>`
+    :`<div class="result-banner rb-sk">→ 정답: ${esc(q.verified)}<span class="rb-time">⏱ 내 풀이 ${fmtSec(sessElapsed[qi]||0)}</span></div>`;
+  let blocks='';
+  if(q.imp) blocks+=`<div class="blk"><div class="blk-lbl">IMP</div><span class="blk-imp">${esc(q.imp)}</span></div>`;
+  if(q.clinical_summary&&typeof q.clinical_summary==='object'){
+    const rows=Object.entries(q.clinical_summary).filter(([,v])=>v!=null&&v!=='');
+    if(rows.length) blocks+=`<div class="blk"><div class="blk-lbl">CLINICAL</div><table class="clin-table">${rows.map(([k,v])=>`<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table></div>`;
+  }
+  if(Array.isArray(q.wrong_option_explanations)&&q.wrong_option_explanations.length)
+    blocks+=`<div class="blk"><div class="blk-lbl">오답 선지</div><ul class="wrong-list">${q.wrong_option_explanations.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  if(q.tip) blocks+=`<div class="blk"><div class="blk-lbl">TIP</div><div class="tip-box">${esc(q.tip)}</div></div>`;
+  if(q.related_theory) blocks+=`<div class="blk"><div class="blk-lbl">관련 이론</div><div class="expl-txt">${esc(q.related_theory)}</div></div>`;
+  const origAns=q.orig_ans?`<div class="expl-orig"><b>원본 정답:</b> ${esc(q.orig_ans)}</div>`:'';
+  const origExpl=q.orig_expl?`<div class="expl-orig" style="margin-top:3px"><b>원본 해설:</b> ${esc(q.orig_expl)}</div>`:'';
+  const ref=q.source?`<div class="expl-src">📖 Reference · ${esc(q.source)}</div>`:'';
+  document.getElementById('expl-area').innerHTML=`${hc}${banner}
+    <div class="expl-card">
+      <div class="expl-lbl">새 해설</div>
+      <div class="expl-txt">${bulletize(q.new_expl||'')}</div>
+      ${blocks}
+      ${(origAns||origExpl||ref)?'<hr class="expl-hr">':''}
+      ${origAns}${origExpl}${ref}
+    </div>`;
+}
+function clickFlag(){ const q=QS[qi]; updateFlagBtn(toggleFlag(q)); renderDots(); }
+function updateFlagBtn(on){ const b=document.getElementById('btn-flag'); if(b) b.classList.toggle('on',on); }
+function go(dir){ const next=qi+dir; if(next<0||next>=QS.length) return; flushTime(); qi=next; qEnter=Date.now(); renderQ(); }
+
+// ─────────── STATS ───────────
+function showStats(){
+  const total=QS.length, v=Object.values(results);
+  const ok=v.filter(x=>x==='ok').length, ng=v.filter(x=>x==='ng').length;
+  const sk=v.filter(x=>x==='sk').length, un=v.filter(x=>x==='un').length;
+  const attempted=ok+ng+sk;                       // 미확인(un) 제외 = 확인한 문항
+  const pct=attempted>0?Math.round(ok/attempted*100):0;
+  const em=pct>=90?'🏆':pct>=70?'👍':pct>=50?'📚':'💪';
+  document.getElementById('st-title').textContent=`결과 ${em}`;
+  document.getElementById('st-sub').textContent=`${total}문항`;
+  document.getElementById('st-mode-badge').innerHTML=`<span class="mode-badge ${mode==='exam'?'mb-exam':'mb-study'}">${mode==='exam'?'📝 시험 모드':'📖 학습 모드'}</span>`;
+  const grid=document.getElementById('st-grid');
+  const boxes=[`<div class="st-box"><div class="st-num c-ok">${ok}</div><div class="st-lbl">정답</div></div>`,
+    `<div class="st-box"><div class="st-num c-ng">${ng}</div><div class="st-lbl">오답</div></div>`,
+    `<div class="st-box"><div class="st-num c-sk">${sk}</div><div class="st-lbl">건너뜀</div></div>`];
+  if(mode==='study') boxes.push(`<div class="st-box"><div class="st-num c-un">${un}</div><div class="st-lbl">미확인</div></div>`);
+  grid.style.gridTemplateColumns=`repeat(${boxes.length},1fr)`; grid.innerHTML=boxes.join('');
+  document.getElementById('rate-pct').textContent=`${pct}%`;
+  setTimeout(()=>{ document.getElementById('rate-fill').style.width=`${pct}%`; },80);
+  const sessTime=Object.values(sessElapsed).reduce((a,b)=>a+b,0);
+  document.getElementById('rate-note').textContent=`확인한 문항 ${attempted}개 기준 (미확인 ${un}개 제외) · 이번 세션 풀이시간 ${fmtSec(sessTime)}`;
+
+  const cum=cumulative();
+  const cumPct=cum.attempts>0?Math.round(cum.correct/cum.attempts*100):0;
+  document.getElementById('cum-box').innerHTML=
+    `📈 내 누적 기록 — 정답률 <b>${cumPct}%</b> (${cum.correct}/${cum.attempts}) · 푼 문항 <b>${cum.questions}</b>개 · 누적 풀이시간 <b>${fmtSec(cum.elapsed)}</b>`;
+
+  const review=QS.map((q,i)=>({q,i,r:results[i]})).filter(({r})=>r==='ng'||r==='sk'||r==='un');
+  const rev=document.getElementById('rev-sec');
+  if(review.length>0){
+    rev.style.display='block';
+    document.getElementById('rev-title').textContent=`확인 필요 문항 (${review.length}개)`;
+    document.getElementById('rev-list').innerHTML=review.map(({q,i,r})=>{
+      const flagOn=isFlag(q); const tag=r==='ng'?'tag-ng':r==='sk'?'tag-sk':'tag-un'; const tl=r==='ng'?'오답':r==='sk'?'건너뜀':'미확인';
+      return `<div class="rev-item"><div class="rev-item-body" onclick="jumpTo(${i})">
+          <div class="rev-stem">Q${i+1}. ${esc(q.stem.length>60?q.stem.slice(0,60)+'…':q.stem)}<span class="rev-tag ${tag}">${tl}</span></div>
+          <div class="rev-ans">정답: ${esc(q.verified)}</div></div>
+        <button class="rev-flag-btn${flagOn?' on':''}" onclick="toggleRevFlag(this,${i})" title="오답 체크">🚩</button></div>`;
+    }).join('');
+  } else rev.style.display='none';
+
+  document.getElementById('btn-retry').style.display=review.length>0?'block':'none';
+  document.getElementById('btn-start-flagged').style.display=ALL_Q.filter(q=>isFlag(q)).length>0?'block':'none';
+  document.getElementById('btn-rapid-wrong').style.display=review.filter(x=>x.r==='ng').length>0?'block':'none';
+  show('screen-stats');
+}
+function toggleRevFlag(btn,i){ btn.classList.toggle('on', toggleFlag(QS[i])); }
+function jumpTo(i){ qi=i; show('screen-quiz'); qEnter=Date.now(); renderQ(); }
+function retryWrong(){
+  const w=QS.filter((_,i)=>results[i]==='ng'||results[i]==='sk'||results[i]==='un'); if(!w.length) return;
+  QS=shuffleOn?shuffleArr(w):w; qi=0; results={}; selOpt=null; examSels={}; graded=false; sessElapsed={};
+  show('screen-quiz'); qEnter=Date.now(); renderQ();
+}
+function startFlagged(){
+  const flagged=ALL_Q.filter(q=>isFlag(q)); if(!flagged.length) return;
+  QS=shuffleOn?shuffleArr(flagged):flagged; qi=0; results={}; selOpt=null; examSels={}; graded=false; sessElapsed={};
+  document.getElementById('exam-banner').style.display=mode==='exam'?'block':'none';
+  document.getElementById('btn-grade').style.display=mode==='exam'?'inline-block':'none';
+  document.getElementById('btn-end').style.display=mode==='study'?'inline-block':'none';
+  document.getElementById('si-ans').style.display=mode==='exam'?'flex':'none';
+  show('screen-quiz'); qEnter=Date.now(); renderQ();
+}
+
+// ─────────── KEYBOARD (v4 그대로) ───────────
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&closeLightbox()) return;     // 라이트박스 열려 있으면 먼저 닫기
+  if(document.getElementById('modal-bg').classList.contains('on')) return;
+  if(document.getElementById('screen-rapid').classList.contains('active')){   // ⚡ 한 줄 복습 전용 키 — 다른 화면 핸들러와 섞이지 않게 조기 반환
+    if(e.key===' '||e.code==='Space'){ e.preventDefault(); rrFlip(); }
+    else if(e.key==='1'){ rrRate('ok'); }
+    else if(e.key==='2'){ rrRate('ng'); }
+    else if(e.key==='ArrowRight'){ e.preventDefault(); rrNext(); }
+    return;
+  }
+  const onQ=document.getElementById('screen-quiz').classList.contains('active'); if(!onQ) return;
+  if(e.key>='1'&&e.key<='9'){ if(isLocked(results[qi])) return;   // R형: 1–9 선지(복수정답이면 토글)
+    const idx=parseInt(e.key)-1; const opts=document.querySelectorAll('.opt'); if(opts[idx]) selectOpt(opts[idx]); return; }
+  if(e.key===' '||e.code==='Space'){ e.preventDefault(); if(mode==='study'&&!isLocked(results[qi])) reveal(); }
+  else if((e.key==='a'||e.key==='A')&&mode==='study'&&!isLocked(results[qi])){ reveal(3); }
+  else if((e.key==='s'||e.key==='S')&&mode==='study'&&!isLocked(results[qi])){ reveal(2); }
+  else if((e.key==='d'||e.key==='D')&&mode==='study'&&!isLocked(results[qi])){ reveal(1); }
+  else if(e.key==='ArrowRight'){ e.preventDefault(); if(qi<QS.length-1) go(1); else if(mode==='study') endSession(); else if(mode==='exam') gradeExam(); }
+  else if(e.key==='ArrowLeft'){ e.preventDefault(); go(-1); }
+});
+
+/* PRIORITY:START */
+const JN_CFG={
+  FREQ_WEIGHT:0.53,
+  REC_WEIGHT:0.47,
+  RECENCY_TABLE:[1,0.9,0.8,0.65,0.5,0.35,0.2],
+  COST_BASE:20,
+  COST_LEN_COEF:0.15,
+  COST_IMAGE_BONUS:10,
+  COST_MIN:20,
+  COST_MAX:120,
+  COST_BLEND_MIN_ATTEMPTS:2,
+  COST_BLEND_RATIO:0.5,
+  COST_BLEND_MIN:10,
+  COST_BLEND_MAX:300,
+  SCOPE_CAP_RATIO:0.6,
+  SCOPE_EXEMPT_SHARE:0.6,
+  TIER_RATIO:{PASS:0.7,STANDARD:0.6},
+  BLOCK_MAX_COUNT:8,
+  BLOCK_MAX_SEC:900,
+  EXAM_BUFFER_SEC:1800,
+  DRIFT_TRIGGER_SEC:300,
+  EXPAND_30MIN_SEC:1800,
+  EXPAND_60MIN_SEC:3600,
+  EXPAND_120MIN_SEC:7200
+};
+function jnSubjectContext(allQ){
+  const years=new Set(); let yearAnchor=null;
+  for(const q of Array.isArray(allQ)?allQ:[]){
+    const qYears=q&&Array.isArray(q.years)?q.years:[];
+    for(const value of qYears){
+      if(value==null||(typeof value==='string'&&!value.trim())) continue;
+      const year=Number(value); if(!Number.isFinite(year)) continue;
+      years.add(year); if(yearAnchor===null||year>yearAnchor) yearAnchor=year;
+    }
+  }
+  return {subjectYearCount:years.size,yearAnchor};
+}
+function jnHasImage(q){ return Boolean(q.image||(Array.isArray(q.images)&&q.images.length)); }
+function jnFrequency(q,ctx){
+  const denominator=ctx&&ctx.subjectYearCount;
+  if(!Number.isFinite(denominator)||denominator<=0) return 0;
+  const years=new Set();
+  for(const value of q&&Array.isArray(q.years)?q.years:[]){
+    if(value==null||(typeof value==='string'&&!value.trim())) continue;
+    const year=Number(value); if(Number.isFinite(year)) years.add(year);
+  }
+  return years.size/denominator;
+}
+function jnRecency(q,ctx){
+  const anchor=ctx&&ctx.yearAnchor; if(!Number.isFinite(anchor)) return 0;
+  let maxYear=null;
+  for(const value of q&&Array.isArray(q.years)?q.years:[]){
+    if(value==null||(typeof value==='string'&&!value.trim())) continue;
+    const year=Number(value); if(Number.isFinite(year)&&(maxYear===null||year>maxYear)) maxYear=year;
+  }
+  if(maxYear===null) return 0;
+  const diff=Math.max(0,anchor-maxYear);
+  return JN_CFG.RECENCY_TABLE[Math.min(Math.floor(diff),JN_CFG.RECENCY_TABLE.length-1)];
+}
+function jnStudyCostFromStat(q,stat){
+  const stemLength=typeof q.stem==='string'?q.stem.length:0;
+  const optionLength=(Array.isArray(q.options)?q.options:[])
+    .reduce((total,option)=>total+(typeof option==='string'?option.length:0),0);
+  const rawCost=JN_CFG.COST_BASE+JN_CFG.COST_LEN_COEF*(stemLength+optionLength)
+    +(jnHasImage(q)?JN_CFG.COST_IMAGE_BONUS:0);
+  const baseCost=Math.max(JN_CFG.COST_MIN,Math.min(JN_CFG.COST_MAX,rawCost));
+  const attempts=Number(stat&&stat.a);
+  if(!Number.isFinite(attempts)||attempts<JN_CFG.COST_BLEND_MIN_ATTEMPTS) return Math.round(baseCost);
+  const measuredSec=Number(stat.e)/attempts/1000;
+  if(!Number.isFinite(measuredSec)) return Math.round(baseCost);
+  const blended=(1-JN_CFG.COST_BLEND_RATIO)*baseCost+JN_CFG.COST_BLEND_RATIO*measuredSec;
+  return Math.round(Math.max(JN_CFG.COST_BLEND_MIN,Math.min(JN_CFG.COST_BLEND_MAX,blended)));
+}
+function jnStudyCost(q){ return jnStudyCostFromStat(q,loadStats()[getQid(q)]); }
+function jnPriorityFromStat(q,ctx,stat){
+  const weighted=JN_CFG.FREQ_WEIGHT*jnFrequency(q,ctx)+JN_CFG.REC_WEIGHT*jnRecency(q,ctx);
+  const estMinutes=jnStudyCostFromStat(q,stat)/60;
+  return weighted*(1/Math.log2(estMinutes+2));
+}
+function jnPriority(q,ctx){ return jnPriorityFromStat(q,ctx,loadStats()[getQid(q)]); }
+function jnScopeUniverse(allQ,selectedScopes){
+  const scopeSet=new Set(Array.isArray(selectedScopes)?selectedScopes:Array.from(selectedScopes||[]));
+  let total=0;
+  for(const q of Array.isArray(allQ)?allQ:[]){
+    if(!q||!scopeSet.has(q.scope)) continue;
+    const years=new Set();
+    for(const value of Array.isArray(q.years)?q.years:[]){
+      if(value==null||(typeof value==='string'&&!value.trim())) continue;
+      const year=Number(value); if(Number.isFinite(year)) years.add(year);
+    }
+    total+=years.size;
+  }
+  return total;
+}
+function jnCoverage(includedList,allQ,selectedScopes){
+  const denominator=jnScopeUniverse(allQ,selectedScopes); if(!denominator) return 0;
+  const questions=Array.isArray(allQ)?allQ:[];
+  let includedWeight=0;
+  for(const item of Array.isArray(includedList)?includedList:[]){
+    const q=item&&questions[item.i]; if(!q) continue;
+    const years=new Set();
+    for(const value of Array.isArray(q.years)?q.years:[]){
+      if(value==null||(typeof value==='string'&&!value.trim())) continue;
+      const year=Number(value); if(Number.isFinite(year)) years.add(year);
+    }
+    includedWeight+=years.size;
+  }
+  return includedWeight/denominator;
+}
+const SCOPE_WEIGHT={same:1,unknown:1,changed:0.7,new:0.7,closed:0.3};
+const SCOPE_PROF_RE=/\[(?:19|20)\d{2}[^\]]*?담당교수\s*[:：]\s*([^\]]+)\]/;
+function scopeTokens(header){
+  const match=String(header||'').match(SCOPE_PROF_RE);
+  return match?match[1].split('·').map(token=>token.trim()):[];
+}
+function scopeTokenStatus(rawToken,profSet){
+  if(rawToken.includes('미개설')) return 'closed';
+  if(rawToken.includes('신설')) return 'new';
+  const name=rawToken.replace(/\([^)]*\)/g,'').trim();
+  if(name===''||name==='미정') return 'unknown';
+  return profSet.has(name)?'same':'changed';
+}
+function scopeStatus(header,profSet){
+  const match=String(header||'').match(SCOPE_PROF_RE);
+  if(!match) return {status:'unknown',weight:1,prof2026:'',tokens:[]};
+  const prof2026=match[1].trim(), tokens=scopeTokens(header), names=profSet||new Set();
+  const statuses=tokens.map(token=>scopeTokenStatus(token,names));
+  const weight=Math.max(...statuses.map(status=>SCOPE_WEIGHT[status]));
+  const status=['same','unknown','changed','new','closed'].find(candidate=>
+    statuses.includes(candidate)&&SCOPE_WEIGHT[candidate]===weight);
+  return {status,weight,prof2026,tokens};
+}
+function scopeMetaMap(allQ){
+  const grouped=new Map();
+  for(const q of Array.isArray(allQ)?allQ:[]){
+    if(!q) continue;
+    if(!grouped.has(q.scope)) grouped.set(q.scope,[]);
+    grouped.get(q.scope).push(q);
+  }
+  const result=new Map();
+  for(const [scope,qs] of grouped){
+    const profSet=new Set(qs.map(q=>getProf(q.meta)));
+    const header=qs[0].scope_header;
+    result.set(scope,scopeStatus(header,profSet));
+  }
+  return result;
+}
+function qPriority(q,ctx,scopeMeta,stat){
+  return jnPriorityFromStat(q,ctx,stat)*(scopeMeta.get(q.scope)?.weight??1);
+}
+function fnv1a32(str){
+  let hash=0x811c9dc5;
+  for(let i=0;i<str.length;i++){
+    hash^=str.charCodeAt(i);
+    hash=Math.imul(hash,0x01000193);
+  }
+  return hash>>>0;
+}
+/* PRIORITY:END */
+
+/* SCHED:START */
+const SCHED_KEY=STORAGE_KEY+'_sched';
+const SR_CFG={STEP_H:[4,24,72,168], MASTER_STREAK:3, EXAM_RATIO:0.35, MIN_GAP_H:1, LAPSE_H:1, GUESS_CONF:1, HIST_MAX:20, LEGACY_STAGGER_MIN:0.5};
+function srDefaultSched(){ return {v:1,examAt:null,conf:true,todayMin:30,font:'M',q:{}}; }
+/* 글자 크기 화이트리스트 — 저장값이 손상돼도('XX'·null·소문자) 항상 기본 'M' 으로 떨어진다. */
+function normFont(f){ return f==='S'||f==='L'?f:'M'; }
+function srNextDue(k,nowMs,examAtMs){
+  const step=SR_CFG.STEP_H[Math.min(k,3)]*3600000;
+  let gap=step;
+  if(Number.isFinite(examAtMs)&&examAtMs>nowMs){
+    const remaining=examAtMs-nowMs;
+    gap=Math.min(step,Math.max(SR_CFG.MIN_GAP_H*3600000,SR_CFG.EXAM_RATIO*remaining),remaining);
+  }
+  return nowMs+gap;
+}
+function srApplyResult(rec,r,conf,nowMs,examAtMs,m,partial){
+  if(r==='sk'||r==='un') return {...rec,h:Array.isArray(rec.h)?rec.h.slice():rec.h};
+  const confidence=conf==null?2:conf;
+  const next={...rec,h:Array.isArray(rec.h)?rec.h.slice():[]};
+  if(r==='ok'&&confidence>=2){
+    next.d=srNextDue(rec.k,nowMs,examAtMs);
+    next.k=rec.k+1;
+  }else if(r==='ok'&&confidence===SR_CFG.GUESS_CONF){
+    next.k=rec.k;
+    next.d=srNextDue(0,nowMs,examAtMs);
+  }else if(r==='ng'&&partial===true){
+    next.k=Math.max(0,rec.k-1);
+    next.d=nowMs+SR_CFG.LAPSE_H*3600000;
+  }else if(r==='ng'){
+    next.k=0;
+    next.d=nowMs+SR_CFG.LAPSE_H*3600000;
+    if(confidence===3) next.hc=rec.hc+1;
+  }
+  next.l=nowMs;
+  next.h=[[nowMs,r,confidence,m],...next.h].slice(0,SR_CFG.HIST_MAX);
+  return next;
+}
+function srNormalize(rec,stat,qid,nowMs){
+  const a=stat&&Number.isFinite(stat.a)&&stat.a>0?stat.a:0;
+  const c=stat&&Number.isFinite(stat.c)&&stat.c>0?stat.c:0;
+  const legacyK=a>0?(c===a?Math.min(a,SR_CFG.MASTER_STREAK):(c>0?1:0)):0;
+  const due=k=>nowMs+SR_CFG.STEP_H[Math.min(k,3)]*3600000
+    *(SR_CFG.LEGACY_STAGGER_MIN+(1-SR_CFG.LEGACY_STAGGER_MIN)*(fnv1a32(qid)%1000)/1000);
+  const isPlain=!!rec&&typeof rec==='object'&&!Array.isArray(rec);
+  if(!isPlain){
+    if(a===0) return null;
+    return {k:legacyK,l:null,d:due(legacyK),hc:0,h:[]};
+  }
+  const k=Number.isInteger(rec.k)&&rec.k>=0?rec.k:legacyK;
+  return {...rec,
+    k,
+    l:rec.l===null||Number.isFinite(rec.l)?rec.l:null,
+    d:rec.d===null||Number.isFinite(rec.d)?rec.d:due(k),
+    hc:Number.isInteger(rec.hc)&&rec.hc>=0?rec.hc:0,
+    h:Array.isArray(rec.h)?rec.h.slice():[]};
+}
+function srNormalizeSched(raw,stats,nowMs){
+  const defaults=srDefaultSched();
+  const isPlain=!!raw&&typeof raw==='object'&&!Array.isArray(raw);
+  const input=isPlain?raw:{};
+  const rawQ=input.q&&typeof input.q==='object'&&!Array.isArray(input.q)?input.q:{};
+  const statMap=stats&&typeof stats==='object'&&!Array.isArray(stats)?stats:{};
+  const sched={...input,
+    v:Number.isFinite(input.v)?input.v:defaults.v,
+    examAt:input.examAt===null||typeof input.examAt==='string'?input.examAt:defaults.examAt,
+    conf:typeof input.conf==='boolean'?input.conf:defaults.conf,
+    todayMin:Number.isFinite(input.todayMin)?input.todayMin:defaults.todayMin,
+    font:typeof input.font==='string'?input.font:defaults.font,
+    q:{}};
+  for(const qid of new Set([...Object.keys(rawQ),...Object.keys(statMap)])){
+    const rec=srNormalize(rawQ[qid],statMap[qid],qid,nowMs);
+    if(rec!==null) sched.q[qid]=rec;
+  }
+  const examMs=srExamMs(sched,nowMs);
+  const normalized=Number.isFinite(examMs)?srClampToExam(sched,nowMs,examMs):sched;
+  return {sched:normalized,changed:!isPlain||JSON.stringify(normalized)!==JSON.stringify(raw)};
+}
+function srIsGradable(q){ return !(q.options&&q.options.length)||correctSet(q).size>0; }
+function srExamMs(sched,nowMs){
+  const ms=new Date(sched&&sched.examAt).getTime();
+  return Number.isFinite(ms)&&ms>nowMs?ms:null;
+}
+function srClampToExam(sched,nowMs,examMs){
+  if(!Number.isFinite(examMs)||examMs<=nowMs) return sched;
+  const q={};
+  for(const [qid,rec] of Object.entries(sched.q||{})){
+    q[qid]=rec&&rec.d!=null?{...rec,d:Math.min(rec.d,srNextDue(rec.k,nowMs,examMs))}:rec;
+  }
+  return {...sched,q};
+}
+function loadSched(){
+  let obj={};
+  try{ obj=JSON.parse(localStorage.getItem(SCHED_KEY)||'{}'); }catch{}
+  const result=srNormalizeSched(obj,loadStats(),Date.now());
+  if(result.changed) saveSched(result.sched);
+  return result.sched;
+}
+function saveSched(o){ try{ localStorage.setItem(SCHED_KEY,JSON.stringify(o)); return true; }catch{ srWarnOnce('저장 실패 — 브라우저 저장공간을 확인하세요'); return false; } }
+function srWarnOnce(msg){
+  if(document.getElementById('sr-warn')) return;
+  const el=document.createElement('div');
+  el.id='sr-warn'; el.className='exam-banner'; el.setAttribute('role','alert'); el.setAttribute('aria-live','assertive'); el.textContent=msg;
+  const header=document.querySelector('.screen.active .header, .screen.active .f-hero')||document.querySelector('.header, .f-hero');
+  if(header&&header.insertAdjacentElement) header.insertAdjacentElement('afterend',el); else document.body.prepend(el);
+}
+function srRecord(q,r,conf,m,partial){
+  if(r==='sk'||r==='un') return;
+  const sched=loadSched(), qid=getQid(q), nowMs=Date.now();
+  const rec=sched.q[qid]||{k:0,l:null,d:null,hc:0,h:[]};
+  sched.q[qid]=srApplyResult(rec,r,conf,nowMs,srExamMs(sched,nowMs),m,partial);
+  saveSched(sched);
+}
+function loadPrefsRaw(){
+  try{ const value=JSON.parse(localStorage.getItem(PREF_KEY)||'{}'); return value&&typeof value==='object'&&!Array.isArray(value)?value:{}; }catch{ return {}; }
+}
+PROGRESS_SUFFIXES.push('_sched');
+/* SCHED:END */
+
+/* TODAY:START */
+function cpBuildToday(allQ,sched,stats,flags,nowMs,budgetSec,ctx,scopeMeta){
+  const questions=Array.isArray(allQ)?allQ:[];
+  const schedQ=sched&&sched.q&&typeof sched.q==='object'?sched.q:{};
+  const statMap=stats&&typeof stats==='object'?stats:{};
+  const allScopes=[...new Set(questions.map(q=>q.scope))];
+  const dueCandidates=[], freshCandidates=[], beforePairs=[];
+  let skippedUngradable=0;
+  for(let i=0;i<questions.length;i++){
+    const q=questions[i], qid=getQid(q), rec=schedQ[qid], stat=statMap[qid];
+    if(rec&&rec.k>=1) beforePairs.push({i,qid});
+    if(!srIsGradable(q)){ skippedUngradable++; continue; }
+    const priority=qPriority(q,ctx,scopeMeta,stat);
+    if(rec&&rec.d!=null&&rec.d<=nowMs){
+      const dueScore=(nowMs-rec.d)/3600000*0.1+2*priority
+        +(rec.hc>0?1:0)+(flags.has(qid)?1.5:0);
+      dueCandidates.push({i,qid,score:dueScore});
+    }
+    const unseen=(stat?.a||0)===0;
+    const untouched=!rec||(rec.l==null&&Array.isArray(rec.h)&&rec.h.length===0);
+    if(unseen&&untouched) freshCandidates.push({i,qid,score:priority});
+  }
+  dueCandidates.sort((a,b)=>(b.score-a.score)||(a.i-b.i));
+  freshCandidates.sort((a,b)=>(b.score-a.score)||(a.i-b.i));
+  const due=[], fresh=[];
+  let estSec=0;
+  for(const candidate of dueCandidates){
+    due.push({i:candidate.i,qid:candidate.qid});
+    estSec+=jnStudyCostFromStat(questions[candidate.i],statMap[candidate.qid]);
+  }
+  const budget=Number.isFinite(budgetSec)?Math.max(0,budgetSec):0;
+  for(const candidate of freshCandidates){
+    const cost=jnStudyCostFromStat(questions[candidate.i],statMap[candidate.qid]);
+    if(estSec+cost>budget) continue;
+    fresh.push({i:candidate.i,qid:candidate.qid});
+    estSec+=cost;
+  }
+  const afterByIndex=new Map(beforePairs.map(pair=>[pair.i,pair]));
+  for(const pair of [...due,...fresh]) afterByIndex.set(pair.i,pair);
+  return {
+    due,
+    fresh,
+    estSec,
+    coverageBefore:jnCoverage(beforePairs,questions,allScopes),
+    coverageAfter:jnCoverage([...afterByIndex.values()],questions,allScopes),
+    skippedUngradable
+  };
+}
+function cpOpen(){ show('screen-today'); cpRenderToday(); }
+function cpRenderToday(){
+  const sched=loadSched(), stats=loadStats(), flags=loadFlags();
+  const scopeMeta=scopeMetaMap(ALL_Q), ctx=jnSubjectContext(ALL_Q), nowMs=Date.now();
+  const result=cpBuildToday(ALL_Q,sched,stats,flags,nowMs,sched.todayMin*60,ctx,scopeMeta);
+  const pairs=[...result.due,...result.fresh];
+  const list=[...result.due,...result.fresh].map(p=>ALL_Q[p.i]);
+  const rows=list.map((q,index)=>{
+    const pair=pairs[index], isDue=index<result.due.length;
+    const years=(q.years||[]).map(year=>`<span class="badge b-gray">${esc(year)}년</span>`).join('');
+    let kind='<span class="badge b-gray">새 문항</span>';
+    if(isDue){
+      const elapsed=Math.max(0,nowMs-sched.q[pair.qid].d);
+      const amount=elapsed>=86400000?Math.floor(elapsed/86400000)+'일'
+        :elapsed>=3600000?Math.floor(elapsed/3600000)+'시간':Math.floor(elapsed/60000)+'분';
+      kind=`<span class="badge b-royal">복습 · ${amount} 지남</span>`;
+    }
+    return `<div class="dash-row">
+      <div class="meta-row"><span class="badge b-blue">${esc(q.scope)}</span>${years}${kind}</div>
+      <div class="rev-stem" style="margin-top:7px">${esc(q.stem)}</div>
+    </div>`;
+  }).join('');
+  const empty=rows?'':`<div class="dash-empty">오늘 고를 수 있는 문항이 없습니다.<br>출제할 문항이 없습니다.</div>`;
+  document.getElementById('today-body').innerHTML=`
+    <div class="rate-wrap">
+      <label class="rate-top" for="cp-budget-min"><span>오늘 학습 예산</span><span style="color:var(--primary)">${esc(sched.todayMin)}분</span></label>
+      <div class="search-box"><input id="cp-budget-min" type="number" min="5" max="240" step="1" inputmode="numeric" value="${esc(sched.todayMin)}" onchange="cpSetBudget(this.value)" aria-label="오늘 학습 예산(분)"></div>
+    </div>
+    <div class="cum-box" id="cp-summary">복습 ${result.due.length} · 새 문항 ${result.fresh.length} · 예상 ${Math.round(result.estSec/60)}분 · 채점불가 ${result.skippedUngradable} 제외</div>
+    <div class="rate-wrap" id="cp-coverage"><div class="rate-top"><span>커버리지</span><span style="color:var(--primary)">지금 ${Math.round(result.coverageBefore*100)}% → 오늘 끝나면 ${Math.round(result.coverageAfter*100)}%</span></div></div>
+    <div class="dash-sec">오늘 문항</div>${rows}${empty}
+    <div class="st-btns">
+      <button class="st-btn sb-retry" type="button" onclick="cpStart()">학습 시작</button>
+      <button class="st-btn sb-new" type="button" onclick="cpStartDueOnly()">복습만</button>
+      <button class="st-btn sb-new" type="button" onclick="rrStart(rrPairsFromIdx([${pairs.map(p=>p.i).join(',')}]))">⚡ 한 줄로</button>
+    </div>`;
+}
+function cpSetBudget(min){
+  const value=Number(min);
+  const clamped=Number.isFinite(value)&&value>=5&&value<=240?value:5;
+  const s=loadSched(); s.todayMin=clamped; saveSched(s);
+  cpRenderToday();
+}
+function cpStart(){
+  const sched=loadSched(), stats=loadStats(), flags=loadFlags();
+  const ctx=jnSubjectContext(ALL_Q), scopeMeta=scopeMetaMap(ALL_Q);
+  const result=cpBuildToday(ALL_Q, sched, stats, flags, Date.now(), sched.todayMin*60, ctx, scopeMeta);
+  const list=[...result.due,...result.fresh].map(p=>ALL_Q[p.i]);
+  const keep=shuffleOn; shuffleOn=false;
+  try{ fs.royalOnly=false; if(!startSessionWith(list)) alert('출제할 문항이 없습니다.'); }
+  finally{ shuffleOn=keep; }
+}
+function cpStartDueOnly(){
+  const sched=loadSched(), stats=loadStats(), flags=loadFlags();
+  const ctx=jnSubjectContext(ALL_Q), scopeMeta=scopeMetaMap(ALL_Q);
+  const result=cpBuildToday(ALL_Q, sched, stats, flags, Date.now(), sched.todayMin*60, ctx, scopeMeta);
+  const list=result.due.map(p=>ALL_Q[p.i]);
+  const keep=shuffleOn; shuffleOn=false;
+  try{ fs.royalOnly=false; if(!startSessionWith(list)) alert('출제할 문항이 없습니다.'); }
+  finally{ shuffleOn=keep; }
+}
+/* TODAY:END */
+
+/* DASH2:START */
+function dbExamState(sched,nowMs){
+  const futureMs=srExamMs(sched,nowMs);
+  if(Number.isFinite(futureMs)) return {state:'future',ms:futureMs};
+  if(!sched||sched.examAt==null) return {state:'none',ms:null};
+  const parsedMs=new Date(sched.examAt).getTime();
+  if(Number.isFinite(parsedMs)&&parsedMs<=nowMs) return {state:'past',ms:parsedMs};
+  return {state:'none',ms:null};
+}
+function dbSetExam(value){
+  const raw=typeof value==='string'?value.trim():'';
+  const err=document.getElementById('db-exam-err'), nowMs=Date.now();
+  let examMs=null;
+  if(raw){
+    examMs=new Date(raw).getTime();
+    if(!Number.isFinite(examMs)||examMs<=nowMs){
+      if(err){
+        err.textContent=Number.isFinite(examMs)?'과거 시각은 저장할 수 없습니다':'올바른 시험 일시를 입력하세요';
+        err.style.display='block';
+      }
+      return;
+    }
+  }
+  let sched=loadSched();
+  sched.examAt=raw||null;
+  if(raw) sched=srClampToExam(sched,nowMs,examMs);
+  saveSched(sched);
+  dbRenderV2();
+}
+function dbMastery(allQ,sched,nowMs){
+  const result=new Map();
+  const questions=Array.isArray(allQ)?allQ:[];
+  const schedQ=sched&&sched.q&&typeof sched.q==='object'?sched.q:{};
+  for(const q of questions){
+    if(!result.has(q.scope)) result.set(q.scope,{gradable:0,mastered:0,due:0,ungradable:0});
+    const counts=result.get(q.scope);
+    if(!srIsGradable(q)){ counts.ungradable++; continue; }
+    counts.gradable++;
+    const rec=schedQ[getQid(q)];
+    if(rec&&rec.k>=SR_CFG.MASTER_STREAK) counts.mastered++;
+    if(rec&&rec.d!=null&&rec.d<=nowMs) counts.due++;
+  }
+  return result;
+}
+function dbRenderV2(){
+  const container=document.getElementById('dash-v2');
+  if(!container) return;
+  const nowMs=Date.now(), sched=loadSched(), stats=loadStats(), flags=loadFlags();
+  const ctx=jnSubjectContext(ALL_Q), scopeMeta=scopeMetaMap(ALL_Q);
+  const today=cpBuildToday(ALL_Q,sched,stats,flags,nowMs,sched.todayMin*60,ctx,scopeMeta);
+  const exam=dbExamState(sched,nowMs);
+  let examText='시험일을 입력하세요', examColor='var(--sub)';
+  if(exam.state==='future'){
+    const left=exam.ms-nowMs;
+    examText=`D-${Math.ceil(left/86400000)} · ${Math.ceil(left/3600000)}시간 남음`;
+    examColor='var(--primary)';
+  }else if(exam.state==='past'){
+    examText='시험이 지났습니다 — 시험일을 갱신하세요'; examColor='var(--ng)';
+  }
+
+  const mastery=dbMastery(ALL_Q,sched,nowMs);
+  const scopes=SCOPE_ORDER.filter(scope=>mastery.has(scope));
+  for(const scope of mastery.keys()) if(!scopes.includes(scope)) scopes.push(scope);
+  const statusLabels={changed:'교수교체',new:'신설',closed:'미개설'};
+  let scopeRows='';
+  for(const name of scopes){
+    const counts=mastery.get(name), pct=counts.gradable?Math.round(counts.mastered/counts.gradable*100):0;
+    const status=scopeMeta.get(name)?.status, label=statusLabels[status];
+    const badge=label?`<span class="badge b-gray">${label}</span>`:'';
+    const pctText=counts.gradable?pct+'%':'—', color=counts.gradable?_accColor(pct):'var(--sub)';
+    const bar=counts.gradable?`<div class="dr-bar"><div class="dr-fill" style="width:${pct}%;background:${color}"></div></div>`:'';
+    const ungradableText=counts.ungradable?`<span>채점불가 ${counts.ungradable}</span>`:'';
+    scopeRows+=`<div class="dash-row clickable" role="button" tabindex="0" aria-label="${esc(name)} 범위 풀기" onclick="drillScope('${escJs(name)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();drillScope('${escJs(name)}')}">
+      <div class="dr-top"><span class="dr-name" title="${esc(name)}">${esc(name)}</span>${badge}<span class="dr-pct" style="color:${color}">${pctText}</span></div>
+      ${bar}
+      <div class="dr-meta"><span>숙련 ${counts.mastered}/${counts.gradable}</span><span>복습 ${counts.due}</span>${ungradableText}<span class="dr-go">▶ 풀기</span></div>
+    </div>`;
+  }
+  const hcCount=ALL_Q.reduce((count,q)=>{
+    const rec=sched.q&&sched.q[getQid(q)];
+    return count+(rec&&rec.hc>0&&srIsGradable(q)?1:0);
+  },0);
+  const ungradable=ALL_Q.reduce((count,q)=>count+(!srIsGradable(q)?1:0),0);
+  container.innerHTML=`
+    <div class="reset-row">
+      <label class="rr-top" for="db-exam-input"><span>시험일</span></label>
+      <div class="search-box" style="margin-top:8px"><input type="datetime-local" id="db-exam-input" value="${esc(sched.examAt||'')}" onchange="dbSetExam(this.value)" style="min-width:0"></div>
+      <div class="rr-sub" id="db-exam-state" aria-live="polite" style="color:${examColor};margin-top:7px">${examText}</div>
+      <div class="rr-sub" id="db-exam-err" role="alert" aria-live="assertive" style="display:none;color:var(--ng);margin-top:6px"></div>
+    </div>
+    <div class="cum-box">오늘 할 일 · 복습 ${today.due.length} · 새 문항 ${today.fresh.length} · 예상 ${Math.round(today.estSec/60)}분</div>
+    <div class="dash-sec">범위별 숙련도 <span style="font-weight:400">· 클릭하면 그 범위 바로 풀기</span></div>
+    ${scopeRows}
+    <div class="st-btns" style="margin-top:10px">
+      <button class="st-btn sb-retry" type="button" onclick="dbStartHC()"${hcCount?'':' disabled'}>확신 오답 ${hcCount} 풀기</button>
+    </div>
+    <div class="dr-meta" style="justify-content:center;margin:8px 0 4px">채점불가 ${ungradable}</div>`;
+}
+function dbStartHC(){
+  const sched=loadSched(), schedQ=sched.q||{};
+  const list=ALL_Q.map((q,i)=>({q,i,hc:schedQ[getQid(q)]?.hc||0}))
+    .filter(item=>item.hc>0&&srIsGradable(item.q))
+    .sort((a,b)=>(b.hc-a.hc)||(a.i-b.i)).map(item=>item.q);
+  mode='study';
+  const keep=shuffleOn; shuffleOn=false;
+  try{ fs.royalOnly=false; if(!startSessionWith(list)) alert('출제할 문항이 없습니다.'); }
+  finally{ shuffleOn=keep; }
+}
+/* DASH2:END */
+
+/* RAPID:START */
+/* ⚡ 한 줄 복습 — 앞면은 문두만, 뒤집으면 정답+핵심 한 줄.
+   선지·해설 전문은 렌더하지 않고 _stats/_daily 도 건드리지 않는다(스케줄러 _sched 만 기록). */
+let rrList=[], rrIdx=0, rrFlipped=false, rrCounts={ok:0,ng:0}, rrReturnScreen='screen-filter';
+function rrBack(q){
+  const verified=String((q&&q.verified)||'').replace(ROYAL_RE,'').trim();
+  let key=q&&q.imp?String(q.imp).replace(ROYAL_RE,'').trim():'';
+  if(!key){
+    const expl=q&&q.new_expl;
+    const first=Array.isArray(expl)?(expl.length?expl[0]:''):(expl==null?'':expl);
+    key=String(first).replace(ROYAL_RE,'').trim().slice(0,200);
+  }
+  return key?verified+' — '+key:verified;
+}
+function rrPairsFromList(qs){ return (Array.isArray(qs)?qs:[]).map(q=>({i:ALL_Q.indexOf(q),qid:getQid(q)})); }
+function rrPairsFromIdx(idxs){ return (Array.isArray(idxs)?idxs:[]).map(i=>({i,qid:getQid(ALL_Q[i])})); }
+function rrStart(pairs){
+  const list=(Array.isArray(pairs)?pairs:[]).filter(p=>p&&p.i>=0&&ALL_Q[p.i]);
+  if(!list.length){ alert('출제할 문항이 없습니다.'); return; }
+  const active=document.querySelector('.screen.active');
+  rrReturnScreen=active&&active.id&&active.id!=='screen-rapid'?active.id:'screen-filter';
+  rrList=list; rrIdx=0; rrFlipped=false; rrCounts={ok:0,ng:0};
+  show('screen-rapid'); rrRender();
+}
+function rrRender(){
+  const body=document.getElementById('rapid-body'), total=rrList.length;
+  document.getElementById('rapid-prog').textContent=`${Math.min(rrIdx+1,total)}/${total}`;
+  if(rrIdx>=total){
+    document.getElementById('rapid-prog').textContent=`${total}/${total}`;
+    document.getElementById('rapid-sub').textContent='한 바퀴 끝났습니다.';
+    document.getElementById('rapid-acts').style.display='none';
+    body.innerHTML=`<div class="card rr-card">
+      <div class="rr-done">⚡ 한 줄 복습 끝</div>
+      <div class="cum-box" style="margin-bottom:0">알았다 <b>${rrCounts.ok}</b> · 몰랐다 <b>${rrCounts.ng}</b> · 전체 <b>${total}</b>문항</div>
+      <div class="st-btns rr-acts"><button class="st-btn sb-retry" type="button" onclick="rrExit()">나가기</button></div>
+    </div>`;
+    return;
+  }
+  document.getElementById('rapid-acts').style.display='flex';
+  document.getElementById('rapid-sub').textContent=`남은 ${total-rrIdx}장 · 알았다 ${rrCounts.ok} · 몰랐다 ${rrCounts.ng}`;
+  const q=ALL_Q[rrList[rrIdx].i];
+  const srcs=(q.image?[q.image]:[]).concat(Array.isArray(q.images)?q.images:[]);
+  const imgs=srcs.map(s=>'<div class="stem-img"><img src="'+s+'" alt="문항 이미지" decoding="async" onclick="openLightbox(this.src)"></div>').join('');
+  const royal=isRoyal(q)?'<span class="badge b-royal">👑 왕족</span>':'';
+  const tail=rrFlipped
+    ?'<div class="rr-back"><div class="rr-side">정답 · 핵심</div><div class="rr-ans">'+esc(rrBack(q))+'</div></div>'
+    :'<div class="rr-hint">답을 떠올린 뒤 <b>뒤집기(Space)</b>를 누르세요.</div>';
+  body.innerHTML=`<div class="card rr-card">
+    <div class="meta-row"><span class="badge b-blue">${esc(q.scope)}</span>${royal}</div>
+    <div class="rr-side" style="margin-top:10px">문제</div>
+    <div class="q-stem">${esc(q.stem)}</div>
+    ${imgs}${tail}
+  </div>`;
+}
+function rrFlip(){ if(rrIdx>=rrList.length) return; rrFlipped=!rrFlipped; rrRender(); }
+function rrRate(r){
+  if(rrIdx>=rrList.length) return;
+  srRecord(ALL_Q[rrList[rrIdx].i],r,2,'r',false);   // ★ _sched 만 기록 — recordAttempt 호출 금지
+  if(r==='ok') rrCounts.ok++; else rrCounts.ng++;
+  rrIdx++; rrFlipped=false; rrRender();
+}
+function rrNext(){ if(rrIdx>=rrList.length) return; rrIdx++; rrFlipped=false; rrRender(); }
+function rrExit(){
+  const target=rrReturnScreen&&document.getElementById(rrReturnScreen)?rrReturnScreen:'screen-filter';
+  if(target==='screen-filter'){ goFilter(); return; }
+  show(target);
+  if(target==='screen-today') cpRenderToday();
+}
+function rrStartWrong(){ rrStart(rrPairsFromList(QS.filter((_,i)=>results[i]==='ng'))); }
+/* RAPID:END */
+
+/* JEONNAL:START */
+function jnCandidates(allQ,selectedScopes,ctx){
+  const stats=loadStats(), scopeMeta=scopeMetaMap(allQ);
+  const scopeSet=new Set(Array.isArray(selectedScopes)?selectedScopes:Array.from(selectedScopes||[]));
+  const list=[], questions=Array.isArray(allQ)?allQ:[];
+  for(let i=0;i<questions.length;i++){
+    const q=questions[i]; if(!q||!scopeSet.has(q.scope)) continue;
+    const qid=getQid(q);
+    list.push({i,qid,scope:q.scope,priority:qPriority(q,ctx,scopeMeta,stats[qid]),
+      estSeconds:jnStudyCostFromStat(q,stats[qid])});
+  }
+  list.sort((a,b)=>(b.priority-a.priority)||(a.i-b.i));
+  return list;
+}
+function jnExtendPlan(sortedCandidates,priorState,targetBudgetSec,scopeShare){
+  const includedSet=new Set(priorState.includedSet);
+  const perScopeTotal=Object.assign({},priorState.perScopeTotal);
+  const breakthroughUsed=new Set(priorState.breakthroughUsed), warnings=[];
+  let runningTotal=Object.values(perScopeTotal).reduce((total,seconds)=>total+seconds,0);
+  const scopeCap=targetBudgetSec*JN_CFG.SCOPE_CAP_RATIO;
+  for(const c of sortedCandidates){
+    if(includedSet.has(c.i)) continue;
+    if(runningTotal+c.estSeconds>targetBudgetSec) continue;
+    const scopeTotal=perScopeTotal[c.scope]||0;
+    if(scopeTotal+c.estSeconds>scopeCap){
+      const share=scopeShare&&scopeShare[c.scope]||0;
+      if(share>JN_CFG.SCOPE_EXEMPT_SHARE){
+        // 후보 풀을 지배하는 scope에는 cap을 적용하지 않는다.
+      }else if(!breakthroughUsed.has(c.scope)){
+        breakthroughUsed.add(c.scope);
+        warnings.push({type:'scope_breakthrough',scope:c.scope,i:c.i,qid:c.qid});
+      }else{
+        continue;
+      }
+    }
+    includedSet.add(c.i);
+    perScopeTotal[c.scope]=scopeTotal+c.estSeconds;
+    runningTotal+=c.estSeconds;
+  }
+  return {includedSet,perScopeTotal,breakthroughUsed,warnings};
+}
+function jnBuildBlocks(essential,recommended,ifTime){
+  const tiers=[['필수',essential],['권장',recommended],['시간남으면',ifTime]], blocks=[];
+  for(const [tier,candidates] of tiers){
+    let current=null;
+    for(const c of candidates){
+      if(!current||current.scope!==c.scope||current.items.length>=JN_CFG.BLOCK_MAX_COUNT
+        ||current.totalSec+c.estSeconds>JN_CFG.BLOCK_MAX_SEC){
+        if(current) blocks.push(current);
+        current={tier,scope:c.scope,items:[],totalSec:0,maxPriority:-Infinity,minIndex:Infinity};
+      }
+      current.items.push(c);
+      current.totalSec+=c.estSeconds;
+      current.maxPriority=Math.max(current.maxPriority,c.priority);
+      current.minIndex=Math.min(current.minIndex,c.i);
+    }
+    if(current) blocks.push(current);
+  }
+  const tierRank={'필수':0,'권장':1,'시간남으면':2};
+  blocks.sort((a,b)=>(tierRank[a.tier]-tierRank[b.tier])
+    ||(b.maxPriority-a.maxPriority)||(a.minIndex-b.minIndex));
+  return blocks.map(block=>{
+    const pairs=block.items.map(c=>({i:c.i,qid:c.qid}));
+    return {blockId:block.tier+'|'+block.scope+'|'+pairs.map(pair=>pair.i).join('-'),
+      tier:block.tier,scope:block.scope,pairs};
+  });
+}
+function jnBuildPlan(allQ,selectedScopes,ctx,budgetSec,goal){
+  const sortedCandidates=jnCandidates(allQ,selectedScopes,ctx), warnings=[];
+  if(!sortedCandidates.length) warnings.push({type:'universe_empty'});
+  if(!budgetSec||budgetSec<=0) warnings.push({type:'budget_zero'});
+
+  const totalCost=sortedCandidates.reduce((total,c)=>total+c.estSeconds,0), scopeShare={};
+  for(const c of sortedCandidates) scopeShare[c.scope]=(scopeShare[c.scope]||0)+c.estSeconds;
+  for(const scope in scopeShare) scopeShare[scope]=totalCost>0?scopeShare[scope]/totalCost:0;
+
+  const emptyState={includedSet:new Set(),perScopeTotal:{},breakthroughUsed:new Set()};
+  const baseResult=jnExtendPlan(sortedCandidates,emptyState,budgetSec,scopeShare);
+  const expandedResult=jnExtendPlan(sortedCandidates,baseResult,
+    budgetSec+JN_CFG.EXPAND_30MIN_SEC,scopeShare);
+
+  const tierRatio=JN_CFG.TIER_RATIO[goal]!=null
+    ?JN_CFG.TIER_RATIO[goal]:JN_CFG.TIER_RATIO.STANDARD;
+  const thresholdSec=budgetSec*tierRatio;
+  const baseIncludedOrdered=sortedCandidates.filter(c=>baseResult.includedSet.has(c.i));
+  const essential=[], recommended=[];
+  let cumulative=0, reached=false;
+  for(const c of baseIncludedOrdered){
+    if(!reached){
+      essential.push(c);
+      cumulative+=c.estSeconds;
+      if(cumulative>=thresholdSec) reached=true;
+    }else{
+      recommended.push(c);
+    }
+  }
+  const ifTime=sortedCandidates.filter(c=>expandedResult.includedSet.has(c.i)&&!baseResult.includedSet.has(c.i));
+  const excluded=sortedCandidates.filter(c=>!expandedResult.includedSet.has(c.i));
+  const toPair=c=>({i:c.i,qid:c.qid});
+  const coverage=jnCoverage([...essential,...recommended,...ifTime].map(toPair),allQ,selectedScopes);
+  const blocks=jnBuildBlocks(essential,recommended,ifTime);
+
+  return {
+    pairs:sortedCandidates.map(toPair),
+    tiers:{
+      essential:essential.map(toPair),
+      recommended:recommended.map(toPair),
+      ifTime:ifTime.map(toPair),
+      excluded:excluded.map(toPair)
+    },
+    blocks,
+    coverage,
+    warnings:[...warnings,...baseResult.warnings,...expandedResult.warnings]
+  };
+}
+function jnMarginalGain(allQ,selectedScopes,ctx,budgetSec,goal){
+  const sortedCandidates=jnCandidates(allQ,selectedScopes,ctx);
+  const totalCost=sortedCandidates.reduce((total,c)=>total+c.estSeconds,0), scopeShare={};
+  for(const c of sortedCandidates) scopeShare[c.scope]=(scopeShare[c.scope]||0)+c.estSeconds;
+  for(const scope in scopeShare) scopeShare[scope]=totalCost>0?scopeShare[scope]/totalCost:0;
+
+  const emptyState={includedSet:new Set(),perScopeTotal:{},breakthroughUsed:new Set()};
+  const r0=jnExtendPlan(sortedCandidates,emptyState,budgetSec,scopeShare);
+  const base=jnExtendPlan(sortedCandidates,r0,budgetSec+JN_CFG.EXPAND_30MIN_SEC,scopeShare);
+  const r30=jnExtendPlan(sortedCandidates,base,budgetSec+JN_CFG.EXPAND_60MIN_SEC,scopeShare);
+  const r60=jnExtendPlan(sortedCandidates,r30,
+    budgetSec+JN_CFG.EXPAND_30MIN_SEC+JN_CFG.EXPAND_60MIN_SEC,scopeShare);
+  const r120=jnExtendPlan(sortedCandidates,r60,
+    budgetSec+JN_CFG.EXPAND_30MIN_SEC+JN_CFG.EXPAND_120MIN_SEC,scopeShare);
+  const toPair=c=>({i:c.i,qid:c.qid});
+  const covOf=result=>jnCoverage(sortedCandidates.filter(c=>result.includedSet.has(c.i)).map(toPair),
+    allQ,selectedScopes);
+  const base0=covOf(base);
+  return {
+    gain30:(covOf(r30)-base0)*100,
+    gain60:(covOf(r60)-base0)*100,
+    gain120:(covOf(r120)-base0)*100
+  };
+}
+function jnRemainingSec(plan,totalActiveMsAfterCommit,commitAt){
+  const inputBudgetSec=Number(plan&&plan.inputBudgetSec);
+  const activeElapsedMs=Number(totalActiveMsAfterCommit);
+  const examAtMs=new Date(plan&&plan.examAt).getTime();
+  const completedAtMs=Number(commitAt);
+  if(!Number.isFinite(inputBudgetSec)||!Number.isFinite(activeElapsedMs)
+    ||!Number.isFinite(examAtMs)||!Number.isFinite(completedAtMs)) return 0;
+  const activeElapsedSec=activeElapsedMs/1000;
+  const examRemainingSec=(examAtMs-completedAtMs)/1000;
+  return Math.max(0,Math.min(inputBudgetSec-activeElapsedSec,
+    examRemainingSec-JN_CFG.EXAM_BUFFER_SEC));
+}
+function jnExpectedDoneMs(plan,doneBlockIds){
+  const questions=typeof ALL_Q!=='undefined'&&Array.isArray(ALL_Q)?ALL_Q:[];
+  const blocks=plan&&Array.isArray(plan.blocks)?plan.blocks:[];
+  const blockMap=new Map(blocks.filter(block=>block&&typeof block.blockId==='string')
+    .map(block=>[block.blockId,block]));
+  let ms=0;
+  for(const id of Array.isArray(doneBlockIds)?doneBlockIds:[]){
+    const block=blockMap.get(id); if(!block||!Array.isArray(block.pairs)) continue;
+    for(const pair of block.pairs){
+      const q=pair&&questions[pair.i]; if(q) ms+=jnStudyCost(q)*1000;
+    }
+  }
+  return ms;
+}
+function jnComputeDrift(plan,totalActiveMsAfterCommit,doneBlockIdsAfterCommit){
+  const actual=Number(totalActiveMsAfterCommit);
+  const baselineActive=Number(plan&&plan.baselineActiveMs);
+  const baselineExpected=Number(plan&&plan.baselineExpectedDoneMs);
+  const expectedDoneMs=jnExpectedDoneMs(plan,doneBlockIdsAfterCommit);
+  return (Number.isFinite(actual)?actual:0)-(Number.isFinite(baselineActive)?baselineActive:0)
+    -(expectedDoneMs-(Number.isFinite(baselineExpected)?baselineExpected:0));
+}
+function jnReplan(plan,remainingSec,candidates,cfg,ctx){
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  const validPair=value=>object(value)&&Number.isInteger(value.i)&&value.i>=0
+    &&typeof value.qid==='string';
+  const source=object(plan)?plan:{};
+  const sourceTiers=object(source.tiers)?source.tiers:{};
+  const essential=(Array.isArray(sourceTiers.essential)?sourceTiers.essential:[])
+    .filter(validPair).slice();
+  const recommended=(Array.isArray(sourceTiers.recommended)?sourceTiers.recommended:[])
+    .filter(validPair).slice();
+  const ifTime=(Array.isArray(sourceTiers.ifTime)?sourceTiers.ifTime:[])
+    .filter(validPair).slice();
+  const excluded=(Array.isArray(sourceTiers.excluded)?sourceTiers.excluded:[])
+    .filter(validPair).slice();
+  const candidateList=(Array.isArray(candidates)?candidates:[]).filter(candidate=>
+    object(candidate)&&Number.isInteger(candidate.i)&&candidate.i>=0
+      &&typeof candidate.qid==='string'&&typeof candidate.scope==='string'
+      &&Number.isFinite(candidate.priority)&&Number.isFinite(candidate.estSeconds)
+      &&candidate.estSeconds>=0);
+  const byIndex=new Map(candidateList.map(candidate=>[candidate.i,candidate]));
+  const questions=typeof ALL_Q!=='undefined'&&Array.isArray(ALL_Q)?ALL_Q:[];
+  const blocks=(Array.isArray(source.blocks)?source.blocks:[]).filter(block=>object(block));
+  const doneBlockIds=(Array.isArray(source.doneBlockIds)?source.doneBlockIds:[])
+    .filter(id=>typeof id==='string');
+  const doneBlockSet=new Set(doneBlockIds), doneSet=new Set(), blockOf=new Map();
+  let frozenEstSec=0;
+  for(const block of blocks){
+    const isDone=typeof block.blockId==='string'&&doneBlockSet.has(block.blockId);
+    for(const pair of Array.isArray(block.pairs)?block.pairs:[]){
+      if(!validPair(pair)) continue;
+      blockOf.set(pair.i,typeof block.blockId==='string'?block.blockId:'');
+      if(isDone){
+        doneSet.add(pair.i);
+        const q=questions[pair.i]; if(q) frozenEstSec+=jnStudyCost(q);
+      }
+    }
+  }
+  const costOf=i=>{
+    const candidate=byIndex.get(i);
+    if(candidate&&Number.isFinite(candidate.estSeconds)) return candidate.estSeconds;
+    const q=questions[i]; return q?jnStudyCost(q):0;
+  };
+  const essentialSet=new Set(essential.map(pair=>pair.i));
+  const notDoneEssential=essential.filter(pair=>!doneSet.has(pair.i));
+  const essentialCost=notDoneEssential.reduce((total,pair)=>total+costOf(pair.i),0);
+  const available=Math.max(0,Number.isFinite(Number(remainingSec))?Number(remainingSec):0);
+  let overBudget=false;
+  let recommendedKept=recommended.filter(pair=>!doneSet.has(pair.i));
+  const removedToExcluded=[];
+
+  if(essentialCost>available){
+    overBudget=true;
+  }else{
+    const budget=available-essentialCost;
+    let recommendedCost=recommendedKept.reduce((total,pair)=>total+costOf(pair.i),0);
+    if(recommendedCost>budget){
+      const removalOrder=recommendedKept.slice().sort((a,b)=>{
+        const pa=byIndex.get(a.i)?.priority??-Infinity;
+        const pb=byIndex.get(b.i)?.priority??-Infinity;
+        if(pa!==pb) return pa-pb;
+        return (blockOf.get(a.i)||'').localeCompare(blockOf.get(b.i)||'');
+      });
+      const keepSet=new Set(recommendedKept.map(pair=>pair.i));
+      for(const victim of removalOrder){
+        if(recommendedCost<=budget) break;
+        keepSet.delete(victim.i); recommendedCost-=costOf(victim.i);
+        removedToExcluded.push(victim);
+      }
+      recommendedKept=recommendedKept.filter(pair=>keepSet.has(pair.i));
+    }else if(recommendedCost<budget){
+      const inRecommended=new Set(recommendedKept.map(pair=>pair.i)), seenAddable=new Set();
+      const addablePool=[...ifTime,...excluded].filter(pair=>{
+        if(doneSet.has(pair.i)||essentialSet.has(pair.i)||inRecommended.has(pair.i)
+          ||seenAddable.has(pair.i)) return false;
+        seenAddable.add(pair.i); return true;
+      });
+      const yearWeight=i=>{
+        const q=questions[i]; if(!q) return 0;
+        return new Set((Array.isArray(q.years)?q.years:[]).map(Number)
+          .filter(Number.isFinite)).size;
+      };
+      const addOrder=addablePool.slice().sort((a,b)=>{
+        const gainA=yearWeight(a.i), gainB=yearWeight(b.i);
+        if(gainA!==gainB) return gainB-gainA;
+        const pa=byIndex.get(a.i)?.priority??-Infinity;
+        const pb=byIndex.get(b.i)?.priority??-Infinity;
+        if(pa!==pb) return pb-pa;
+        return a.i-b.i;
+      });
+      const capRatio=Number.isFinite(Number(cfg&&cfg.SCOPE_CAP_RATIO))
+        ?Number(cfg.SCOPE_CAP_RATIO):JN_CFG.SCOPE_CAP_RATIO;
+      const scopeCap=(frozenEstSec+available)*capRatio, scopeTotals={};
+      for(const pair of [...notDoneEssential,...recommendedKept,...[...doneSet].map(i=>({i}))]){
+        const q=questions[pair.i], candidate=byIndex.get(pair.i); if(!q&&!candidate) continue;
+        const scope=candidate?candidate.scope:q.scope; if(typeof scope!=='string') continue;
+        scopeTotals[scope]=(scopeTotals[scope]||0)+costOf(pair.i);
+      }
+      for(const pair of addOrder){
+        const candidate=byIndex.get(pair.i); if(!candidate) continue;
+        if(recommendedCost+candidate.estSeconds>budget) continue;
+        const scopeTotal=scopeTotals[candidate.scope]||0;
+        if(scopeTotal+candidate.estSeconds>scopeCap) continue;
+        recommendedKept.push(pair); recommendedCost+=candidate.estSeconds;
+        scopeTotals[candidate.scope]=scopeTotal+candidate.estSeconds;
+      }
+    }
+  }
+
+  const newExcludedIds=new Set([...excluded,...ifTime,...removedToExcluded].map(pair=>pair.i));
+  const recommendedIds=new Set(recommendedKept.map(pair=>pair.i));
+  for(const pair of recommendedKept) newExcludedIds.delete(pair.i);
+  const newExcluded=candidateList.filter(candidate=>newExcludedIds.has(candidate.i)
+    &&!recommendedIds.has(candidate.i)&&!essentialSet.has(candidate.i)&&!doneSet.has(candidate.i))
+    .map(candidate=>({i:candidate.i,qid:candidate.qid}));
+  const sourceRecommendedIds=new Set(recommended.map(pair=>pair.i));
+  const retainedRecommendedIds=new Set(recommendedKept.map(pair=>pair.i));
+  const finalRecommended=recommended.filter(pair=>doneSet.has(pair.i)
+    ||retainedRecommendedIds.has(pair.i));
+  finalRecommended.push(...recommendedKept.filter(pair=>!sourceRecommendedIds.has(pair.i)));
+  const frozenIfTime=ifTime.filter(pair=>doneSet.has(pair.i));
+  const newTiers={essential,recommended:finalRecommended,ifTime:frozenIfTime,excluded:newExcluded};
+  const selectedScopes=[...new Set((Array.isArray(source.pairs)?source.pairs:[])
+    .map(pair=>pair&&questions[pair.i]?.scope).filter(Boolean))];
+  const coverage=jnCoverage([...newTiers.essential,...newTiers.recommended,...newTiers.ifTime],
+    questions,selectedScopes);
+  const toCandidates=pairs=>pairs.filter(pair=>!doneSet.has(pair.i))
+    .map(pair=>byIndex.get(pair.i)).filter(Boolean);
+  const rebuilt=jnBuildBlocks(toCandidates(newTiers.essential),
+    toCandidates(newTiers.recommended),[]);
+  const preserved=blocks.filter(block=>typeof block.blockId==='string'
+    &&doneBlockSet.has(block.blockId));
+  const nextBlocks=[...preserved,...rebuilt];
+  return {tiers:newTiers,blocks:nextBlocks,coverage,overBudget};
+}
+function jnFingerprint(q){
+  const years=new Set();
+  for(const value of q&&Array.isArray(q.years)?q.years:[]){
+    if(value==null||(typeof value==='string'&&!value.trim())) continue;
+    const year=Number(value); if(Number.isFinite(year)) years.add(year);
+  }
+  const sortedYears=[...years].sort((a,b)=>a-b);
+  const stemLength=typeof q.stem==='string'?q.stem.length:0;
+  const optionLengths=(Array.isArray(q.options)?q.options:[])
+    .map(option=>typeof option==='string'?option.length:0);
+  return fnv1a32(getQid(q)+'|'+sortedYears.join(',')+'|'+stemLength+'|'
+    +optionLengths.join(',')+'|'+jnHasImage(q));
+}
+function jnValidatePlan(record,allQ,currentStorageKey){
+  const own=(object,key)=>Object.hasOwn(object,key);
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  const number=value=>typeof value==='number'&&Number.isFinite(value);
+  const pair=value=>object(value)&&Number.isInteger(value.i)&&value.i>=0
+    &&typeof value.qid==='string'&&value.qid.length>0;
+  const required=['schemaVersion','planId','status','runState','previousMode','pausedBlock',
+    'pendingCommit','examAt','inputBudgetSec','goal','storageKey','dataFingerprint','pairs',
+    'tiers','blocks','coverage','marginalGain','nextBlockIdx','doneBlockIds','perBlock',
+    'totalActiveMs','baselineActiveMs','baselineExpectedDoneMs','baselineDoneBlockIds',
+    'overBudget','revision','createdAt'];
+  if(!object(record)||!required.every(key=>own(record,key))||record.schemaVersion!==1
+    ||typeof record.planId!=='string'||!record.planId
+    ||typeof record.status!=='string'||typeof record.runState!=='string'
+    ||!(record.previousMode===null||typeof record.previousMode==='string')
+    ||!(record.pausedBlock===null||object(record.pausedBlock))
+    ||!(record.pendingCommit===null||object(record.pendingCommit))
+    ||typeof record.examAt!=='string'||!record.examAt
+    ||!Number.isInteger(record.inputBudgetSec)||record.inputBudgetSec<=0
+    ||typeof record.goal!=='string'||!['PASS','STANDARD'].includes(record.goal)
+    ||typeof record.storageKey!=='string'
+    ||!Number.isInteger(record.dataFingerprint)||record.dataFingerprint<0||record.dataFingerprint>0xffffffff
+    ||!Array.isArray(record.pairs)||!record.pairs.every(pair)
+    ||!object(record.tiers)||!['essential','recommended','ifTime','excluded']
+      .every(key=>Array.isArray(record.tiers[key])&&record.tiers[key].every(pair))
+    ||!Array.isArray(record.blocks)||!number(record.coverage)
+    ||!object(record.marginalGain)||!['gain30','gain60','gain120']
+      .every(key=>number(record.marginalGain[key]))
+    ||!Number.isInteger(record.nextBlockIdx)||record.nextBlockIdx<0
+    ||!Array.isArray(record.doneBlockIds)||!record.doneBlockIds.every(id=>typeof id==='string')
+    ||!object(record.perBlock)||!number(record.totalActiveMs)||record.totalActiveMs<0
+    ||!number(record.baselineActiveMs)||record.baselineActiveMs<0
+    ||!number(record.baselineExpectedDoneMs)||record.baselineExpectedDoneMs<0
+    ||!Array.isArray(record.baselineDoneBlockIds)
+      ||!record.baselineDoneBlockIds.every(id=>typeof id==='string')
+    ||typeof record.overBudget!=='boolean'
+    ||!Number.isInteger(record.revision)||record.revision<0
+    ||!number(record.createdAt)||record.createdAt<=0){
+    return {valid:false,reason:'schema'};
+  }
+  const dateMatch=record.examAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  const examDate=new Date(record.examAt);
+  if(!dateMatch||!Number.isFinite(examDate.getTime())
+    ||examDate.getFullYear()!==Number(dateMatch[1])||examDate.getMonth()+1!==Number(dateMatch[2])
+    ||examDate.getDate()!==Number(dateMatch[3])||examDate.getHours()!==Number(dateMatch[4])
+    ||examDate.getMinutes()!==Number(dateMatch[5])
+    ||examDate.getSeconds()!==Number(dateMatch[6]||0)){
+    return {valid:false,reason:'schema'};
+  }
+  const compatible=(record.status==='planning'&&record.runState==='planning')
+    ||(record.status==='active'&&['between','inBlock','paused'].includes(record.runState))
+    ||(record.status==='done'&&record.runState==='between');
+  if(!compatible) return {valid:false,reason:'compat'};
+  if(record.storageKey!==currentStorageKey) return {valid:false,reason:'storageKey'};
+  const questions=Array.isArray(allQ)?allQ:[];
+  for(const savedPair of record.pairs){
+    const q=questions[savedPair.i];
+    if(!q||getQid(q)!==savedPair.qid) return {valid:false,reason:'pairs'};
+  }
+  const fingerprint=fnv1a32(record.pairs.map(savedPair=>jnFingerprint(questions[savedPair.i])).join('|'));
+  if(record.dataFingerprint!==fingerprint) return {valid:false,reason:'fingerprint'};
+  return {valid:true,reason:null};
+}
+function jnLoadPlan(){
+  const key=STORAGE_KEY+'_jn_plan'; let raw;
+  try{ raw=localStorage.getItem(key); }catch{ return null; }
+  if(raw===null) return null;
+  let record;
+  try{ record=JSON.parse(raw); }
+  catch{
+    try{ localStorage.removeItem(key); }catch{}
+    jnShowWarning('저장된 계획을 읽을 수 없어 다시 만들어야 합니다.');
+    return null;
+  }
+  const result=jnValidatePlan(record,ALL_Q,STORAGE_KEY);
+  if(!result.valid){
+    try{ localStorage.removeItem(key); }catch{}
+    const changed=result.reason==='pairs'||result.reason==='fingerprint';
+    jnShowWarning(changed?'데이터가 변경되어 계획을 다시 만들어야 합니다.'
+      :'저장된 계획이 올바르지 않아 다시 만들어야 합니다.');
+    return null;
+  }
+  return record;
+}
+function jnSavePlan(record){
+  try{ localStorage.setItem(STORAGE_KEY+'_jn_plan',JSON.stringify(record)); return true; }
+  catch{ return false; }
+}
+let jnState='idle', jnPlan=null, jnCountdownTimer=null;
+function jnShowWarning(message){
+  const el=document.getElementById('jn-warning'); if(!el) return;
+  el.textContent=message; el.style.display='block'; jnPlaceWarning();
+}
+function jnPlaceWarning(){
+  const el=document.getElementById('jn-warning');
+  const active=document.querySelector('.screen.active'); if(!el||!active) return;
+  const anchor=(active.id==='screen-jn-settings'||active.id==='screen-jn-summary')
+    ?active.querySelector('.dash-head'):active.id==='screen-quiz'
+      ?active.querySelector('.header')
+      :active.querySelector('.hero-acts')||active.querySelector('.f-tools');
+  if(anchor) anchor.insertAdjacentElement('afterend',el);
+}
+function jnHideWarning(){
+  const el=document.getElementById('jn-warning'); if(!el) return;
+  el.textContent=''; el.style.display='none';
+}
+function jnSetError(id,message){
+  const el=document.getElementById(id); if(!el) return;
+  el.textContent=message||''; el.style.display=message?'block':'none';
+}
+function jnClearSettingsMessages(){
+  ['jn-examat-error','jn-budget-error','jn-goal-error','jn-form-error']
+    .forEach(id=>{ jnSetError(id,''); });
+  const note=document.getElementById('jn-budget-note');
+  if(note){ note.textContent=''; note.style.display='none'; }
+}
+function jnSelectedScopes(){
+  return [...document.querySelectorAll('#jn-scopes input[type="checkbox"]:checked')]
+    .map(input=>input.value);
+}
+function jnUpdateSaveDisabled(){
+  const hasScopes=jnSelectedScopes().length>0;
+  const button=document.getElementById('jn-save');
+  if(button){ button.disabled=!hasScopes; button.style.opacity=hasScopes?'':'0.35'; button.style.cursor=hasScopes?'':'default'; }
+  const error=document.getElementById('jn-scope-error');
+  if(error){ error.textContent=hasScopes?'':'범위를 하나 이상 선택하세요.'; error.style.display=hasScopes?'none':'block'; }
+}
+function jnRenderScopeChoices(selectedScopes){
+  const container=document.getElementById('jn-scopes'); if(!container) return;
+  const selected=new Set(selectedScopes||[]), scopeMeta=scopeMetaMap(ALL_Q); container.innerHTML='';
+  for(const scope of scopesInData()){
+    const label=document.createElement('label'); label.className='chip';
+    const input=document.createElement('input'); input.type='checkbox'; input.value=scope;
+    input.checked=selected.has(scope); label.classList.toggle('on',input.checked);
+    input.addEventListener('change',()=>{
+      label.classList.toggle('on',input.checked); jnUpdateSaveDisabled();
+    });
+    label.appendChild(input); label.appendChild(document.createTextNode(' '+scope));
+    const status=scopeMeta.get(scope)?.status;
+    const text=status==='changed'?'교수교체':status==='new'?'신설':status==='closed'?'미개설':'';
+    if(text){ const badge=document.createElement('span'); badge.className='badge b-gray';
+      badge.textContent=text; label.append(' ',badge); }
+    container.appendChild(label);
+  }
+  jnUpdateSaveDisabled();
+}
+function jnFormatCountdown(ms){
+  if(!Number.isFinite(ms)||ms<=0) return '시험 시간이 지났습니다';
+  let seconds=Math.floor(ms/1000);
+  const days=Math.floor(seconds/86400); seconds-=days*86400;
+  const hours=Math.floor(seconds/3600); seconds-=hours*3600;
+  const minutes=Math.floor(seconds/60); seconds-=minutes*60;
+  return (days?days+'일 ':'')+hours+'시간 '+minutes+'분 '+seconds+'초';
+}
+function jnTickCountdown(){
+  const input=document.getElementById('jn-examat'), output=document.getElementById('jn-countdown');
+  if(!input||!output) return;
+  const value=input.value, examMs=new Date(value).getTime();
+  output.textContent=value&&Number.isFinite(examMs)
+    ?jnFormatCountdown(examMs-Date.now()):'시험 일시를 선택하세요';
+}
+function jnStartCountdown(){
+  if(jnCountdownTimer) clearInterval(jnCountdownTimer);
+  jnTickCountdown(); jnCountdownTimer=setInterval(jnTickCountdown,1000);
+}
+function jnStopCountdown(){
+  if(jnCountdownTimer){ clearInterval(jnCountdownTimer); jnCountdownTimer=null; }
+}
+function jnRenderSettings(record){
+  jnClearSettingsMessages();
+  const examInput=document.getElementById('jn-examat');
+  const budgetInput=document.getElementById('jn-budget-min');
+  const goalInput=document.getElementById('jn-goal');
+  const stateEl=document.getElementById('jn-plan-state');
+  if(record){
+    examInput.value=record.examAt;
+    budgetInput.value=String(record.inputBudgetSec/60);
+    goalInput.value=record.goal;
+    const persisted=Array.isArray(record.pairs);
+    const selectedScopes=persisted
+      ?[...new Set(record.pairs.map(pair=>ALL_Q[pair.i]?.scope).filter(Boolean))]:[];
+    jnRenderScopeChoices(selectedScopes);
+    stateEl.textContent=record.status==='done'?'완료된 계획':record.status==='active'?'진행 중'
+      :persisted?'계획 있음':'새 계획';
+  }else{
+    examInput.value=loadSched().examAt||''; budgetInput.value=''; goalInput.value='STANDARD';
+    jnRenderScopeChoices([]); stateEl.textContent='새 계획';
+  }
+  jnTickCountdown();
+}
+function jnUpdateEntryButton(){
+  const button=document.getElementById('btn-jn'); if(!button) return;
+  if(jnState==='idle') button.textContent='🌙 전날 모드';
+  else if(jnPlan&&jnPlan.status==='done') button.textContent='🌙 전날 모드 (완료)';
+  else if(jnState==='planning') button.textContent='🌙 전날 모드 (계획 있음)';
+  else button.textContent='🌙 전날 모드 (진행 중)';
+  button.dataset.jnState=jnState;
+}
+function jnEnter(){
+  if(jnPlan&&jnPlan.pendingCommit&&!jnRecoverPending()){
+    jnShowWarning('저장 실패 — 완료 처리를 재시도해 주세요'); return;
+  }
+  fs.royalOnly=false;
+  if(jnPlan&&jnState==='inBlock'){
+    if(!jnRestoreSession()) jnStartBlock(jnPlan.nextBlockIdx,true);
+    return;
+  }
+  if(jnPlan&&jnState==='paused'){ jnResumePausedBlock(); return; }
+  if(jnPlan&&jnState!=='idle'){ jnShowSummary(jnPlan); return; }
+  jnRenderSettings(jnPlan); show('screen-jn-settings'); jnPlaceWarning(); jnStartCountdown();
+}
+function jnExitSettings(){
+  jnStopCountdown(); show('screen-filter'); jnPlaceWarning(); renderFilter();
+}
+function jnSaveSettings(){
+  jnClearSettingsMessages();
+  const examInput=document.getElementById('jn-examat');
+  const budgetInput=document.getElementById('jn-budget-min');
+  const goalInput=document.getElementById('jn-goal');
+  const examAt=examInput.value.trim(), examMs=new Date(examAt).getTime(), now=Date.now();
+  const selectedScopes=jnSelectedScopes();
+  const budgetMinutes=Number(budgetInput.value), goal=goalInput.value;
+  let valid=true;
+  if(!examAt||!Number.isFinite(examMs)||examMs<=now){
+    jnSetError('jn-examat-error','시험 일시는 현재보다 미래여야 합니다.'); valid=false;
+  }
+  if(!selectedScopes.length){
+    jnSetError('jn-scope-error','범위를 하나 이상 선택하세요.'); jnUpdateSaveDisabled(); valid=false;
+  }
+  if(!Number.isInteger(budgetMinutes)||budgetMinutes<1){
+    jnSetError('jn-budget-error','공부 가능 시간은 1분 이상의 정수여야 합니다.'); valid=false;
+  }
+  if(!['PASS','STANDARD'].includes(goal)){
+    jnSetError('jn-goal-error','학습 목표를 다시 선택하세요.'); valid=false;
+  }
+  if(!valid) return false;
+
+  const maxBudgetMinutes=Math.floor((examMs-now)/60000-JN_CFG.EXAM_BUFFER_SEC/60);
+  if(maxBudgetMinutes<1){
+    jnSetError('jn-examat-error','시험 30분 전까지 확보 가능한 시간이 1분 미만입니다.');
+    return false;
+  }
+  const clampedMinutes=Math.min(budgetMinutes,maxBudgetMinutes);
+  if(clampedMinutes!==budgetMinutes){
+    budgetInput.value=String(clampedMinutes);
+    const note=document.getElementById('jn-budget-note');
+    note.textContent='예산이 시험 30분 전 기준 '+clampedMinutes+'분으로 조정되었습니다.';
+    note.style.display='block';
+  }
+  const inputBudgetSec=clampedMinutes*60;
+  const ctx=jnSubjectContext(ALL_Q);
+  const plan=jnBuildPlan(ALL_Q,selectedScopes,ctx,inputBudgetSec,goal);
+  const gain=jnMarginalGain(ALL_Q,selectedScopes,ctx,inputBudgetSec,goal);
+  const createdAt=Date.now();
+  const record={
+    schemaVersion:1,
+    planId:'jn_'+createdAt+'_'+Math.random().toString(36).slice(2,8),
+    status:'planning',
+    runState:'planning',
+    previousMode:null,
+    pausedBlock:null,
+    pendingCommit:null,
+    examAt,
+    inputBudgetSec,
+    goal,
+    storageKey:STORAGE_KEY,
+    dataFingerprint:fnv1a32(plan.pairs.map(pair=>jnFingerprint(ALL_Q[pair.i])).join('|')),
+    pairs:plan.pairs,
+    tiers:plan.tiers,
+    blocks:plan.blocks,
+    coverage:plan.coverage,
+    marginalGain:gain,
+    nextBlockIdx:0,
+    doneBlockIds:[],
+    perBlock:{},
+    totalActiveMs:0,
+    baselineActiveMs:0,
+    baselineExpectedDoneMs:0,
+    baselineDoneBlockIds:[],
+    overBudget:false,
+    revision:0,
+    createdAt
+  };
+  if(!jnSavePlan(record)){
+    jnSetError('jn-form-error','계획을 저장하지 못했습니다. 저장 공간을 확인한 뒤 다시 시도하세요.');
+    return false;
+  }
+  jnPlan=record; jnState='planning'; jnUpdateEntryButton(); jnHideWarning();
+  jnShowSummary(record);
+  return true;
+}
+const JN_TIER_VIEW=[
+  {key:'essential',label:'필수',color:'var(--primary)'},
+  {key:'recommended',label:'권장',color:'var(--ok)'},
+  {key:'ifTime',label:'시간남으면',color:'var(--flag)'},
+  {key:'excluded',label:'제외',color:'var(--un)'}
+];
+let jnSummaryTimer=null;
+function jnPairsSeconds(pairs,allQ){
+  const questions=Array.isArray(allQ)?allQ:[];
+  let seconds=0;
+  for(const pair of Array.isArray(pairs)?pairs:[]){
+    const q=pair&&questions[pair.i]; if(q) seconds+=jnStudyCost(q);
+  }
+  return seconds;
+}
+function jnDataMinutes(seconds){
+  return Math.floor(Math.max(0,seconds)/60*100)/100;
+}
+function jnFormatDuration(seconds){
+  const total=Math.max(0,Math.round(seconds));
+  return total<60?'약 '+total+'초':'약 '+Math.round(total/60)+'분';
+}
+function jnPlanAccuracy(record,stats){
+  const source=stats&&typeof stats==='object'&&!Array.isArray(stats)?stats:{};
+  let attempts=0, correct=0;
+  for(const pair of record&&Array.isArray(record.pairs)?record.pairs:[]){
+    const stat=pair&&source[pair.qid];
+    if(!stat||typeof stat!=='object'||Array.isArray(stat)) continue;
+    attempts+=Number.isFinite(stat.a)?stat.a:0;
+    correct+=Number.isFinite(stat.c)?stat.c:0;
+  }
+  return {attempts,correct,percent:attempts>0?Math.round(correct/attempts*100):null};
+}
+function jnRenderCompletion(record){
+  const completion=document.getElementById('jn-sum-completion');
+  const recreate=document.getElementById('jn-sum-recreate');
+  const done=!!record&&record.status==='done';
+  if(completion) completion.style.display=done?'':'none';
+  if(recreate) recreate.style.display=done?'':'none';
+  if(!done) return;
+  const pairs=Array.isArray(record.pairs)?record.pairs:[];
+  const blocks=Array.isArray(record.blocks)?record.blocks:[];
+  const doneBlockIds=Array.isArray(record.doneBlockIds)?record.doneBlockIds:[];
+  const accuracy=jnPlanAccuracy(record,loadStats());
+  const questions=document.getElementById('jn-sum-done-questions');
+  const completedBlocks=document.getElementById('jn-sum-done-blocks');
+  const activeTime=document.getElementById('jn-sum-done-time');
+  const accuracyEl=document.getElementById('jn-sum-done-accuracy');
+  if(questions) questions.textContent=String(pairs.length);
+  if(completedBlocks) completedBlocks.textContent=`${doneBlockIds.length} / ${blocks.length}`;
+  if(activeTime) activeTime.textContent=jnFormatDuration(record.totalActiveMs/1000);
+  if(accuracyEl){
+    accuracyEl.textContent=accuracy.percent===null?'—':`${accuracy.percent}%`;
+    accuracyEl.dataset.attempts=String(accuracy.attempts);
+    accuracyEl.dataset.correct=String(accuracy.correct);
+  }
+}
+function jnTierColor(tier){
+  const view=JN_TIER_VIEW.find(item=>item.label===tier);
+  return view?view.color:'var(--sub)';
+}
+function jnFormatGain(value){
+  if(!Number.isFinite(value)||value<0.05) return '변화 없음';
+  return '반영률 +'+(Math.round(value*10)/10).toFixed(1)+'%p';
+}
+function jnTickSummaryCountdown(){
+  const output=document.getElementById('jn-sum-countdown'); if(!output) return;
+  const examMs=jnPlan?new Date(jnPlan.examAt).getTime():NaN;
+  output.textContent=Number.isFinite(examMs)
+    ?jnFormatCountdown(examMs-Date.now()):'시험 일시를 다시 확인하세요';
+}
+function jnStartSummaryCountdown(){
+  if(jnSummaryTimer) clearInterval(jnSummaryTimer);
+  jnTickSummaryCountdown(); jnSummaryTimer=setInterval(jnTickSummaryCountdown,1000);
+}
+function jnStopSummaryCountdown(){
+  if(jnSummaryTimer){ clearInterval(jnSummaryTimer); jnSummaryTimer=null; }
+}
+function jnSetSummaryNotice(message){
+  const el=document.getElementById('jn-sum-notice'); if(!el) return;
+  el.textContent=message||''; el.style.display=message?'block':'none';
+}
+function jnRenderAdaptiveNotice(record){
+  const container=document.getElementById('jn-sum-adjustment'); if(!container) return;
+  const revision=Number.isInteger(record&&record.revision)?record.revision:0;
+  const overBudget=!!(record&&record.overBudget);
+  const visible=revision>0||overBudget;
+  container.style.display=visible?'':'none';
+  container.dataset.revision=String(revision);
+  container.dataset.overBudget=String(overBudget);
+  if(!visible) return;
+  container.style.borderColor=overBudget?'var(--ng)':'var(--primary)';
+  const title=document.getElementById('jn-sum-adjustment-title');
+  const revisionEl=document.getElementById('jn-sum-adjustment-revision');
+  const detail=document.getElementById('jn-sum-adjustment-detail');
+  if(title){ title.textContent=overBudget?'예산 초과':'계획이 조정되었습니다';
+    title.style.color=overBudget?'var(--ng)':'var(--primary)'; }
+  if(revisionEl){ revisionEl.textContent=revision>0?revision+'회 조정':'';
+    revisionEl.style.color=overBudget?'var(--ng)':'var(--primary)'; }
+  if(detail) detail.textContent=overBudget?'필수 문항이 남은 시간보다 깁니다.'
+    :'남은 시간과 학습 속도를 반영해 권장 문항과 블록 구성을 다시 계산했습니다.';
+}
+function jnRenderSummaryTiers(record){
+  const container=document.getElementById('jn-sum-tiers'); if(!container) return;
+  container.innerHTML='';
+  for(const view of JN_TIER_VIEW){
+    const pairs=record.tiers&&Array.isArray(record.tiers[view.key])?record.tiers[view.key]:[];
+    const cell=document.createElement('div');
+    cell.className='dash-cell'; cell.dataset.tier=view.label;
+    cell.style.borderTop='3px solid '+view.color;
+    const count=document.createElement('div');
+    count.className='dc-num'; count.style.color=view.color; count.textContent=String(pairs.length);
+    const label=document.createElement('div');
+    label.className='dc-lbl'; label.style.color='var(--text)'; label.style.fontWeight='700';
+    label.textContent=view.label;
+    const minutes=document.createElement('div');
+    minutes.className='dc-lbl';
+    minutes.textContent=pairs.length?jnFormatDuration(jnPairsSeconds(pairs,ALL_Q)):'0분';
+    cell.append(count,label,minutes); container.appendChild(cell);
+  }
+}
+function jnRenderSummaryGain(record){
+  const container=document.getElementById('jn-sum-gain'); if(!container) return;
+  container.innerHTML='';
+  const gain=record.marginalGain||{};
+  for(const [label,value] of [['+30분',gain.gain30],['+60분',gain.gain60],['+120분',gain.gain120]]){
+    const row=document.createElement('div');
+    row.style.display='flex'; row.style.justifyContent='space-between';
+    row.style.gap='10px'; row.style.padding='3px 0';
+    const left=document.createElement('span'); left.textContent=label+' 더 학습하면';
+    const right=document.createElement('b');
+    right.style.color=Number.isFinite(value)&&value>=0.05?'var(--primary)':'var(--sub)';
+    right.textContent=jnFormatGain(value);
+    row.append(left,right); container.appendChild(row);
+  }
+}
+function jnRenderSummaryBlocks(record){
+  const container=document.getElementById('jn-sum-blocks');
+  const blocks=Array.isArray(record.blocks)?record.blocks:[];
+  const items=blocks.map(block=>({block,seconds:jnPairsSeconds(block.pairs,ALL_Q)}));
+  const groups=new Map();
+  for(const item of items){
+    const group=groups.get(item.block.tier)||{count:0,seconds:0};
+    group.count+=1; group.seconds+=item.seconds; groups.set(item.block.tier,group);
+  }
+  const baseSeconds=['필수','권장'].reduce((total,tier)=>
+    total+(groups.has(tier)?groups.get(tier).seconds:0),0);
+  let lastTier=null;
+  if(container){
+    container.innerHTML='';
+    if(!blocks.length){
+      const empty=document.createElement('div');
+      empty.className='dash-empty';
+      empty.textContent='만들어진 블록이 없습니다. 학습 범위나 공부 가능 시간을 늘려 보세요.';
+      container.appendChild(empty);
+    }
+    items.forEach(({block,seconds},index)=>{
+      if(block.tier!==lastTier){
+        lastTier=block.tier;
+        const group=groups.get(lastTier);
+        const head=document.createElement('div');
+        head.className='dash-sec'; head.dataset.tierGroup=lastTier;
+        head.style.color=jnTierColor(lastTier);
+        head.textContent=lastTier+' · 블록 '+group.count+'개 · '+jnFormatDuration(group.seconds);
+        container.appendChild(head);
+      }
+      const color=jnTierColor(block.tier);
+      const row=document.createElement('div');
+      row.className='dash-row'; row.title=block.blockId;
+      row.dataset.blockId=block.blockId; row.dataset.tier=block.tier;
+      row.dataset.scope=block.scope; row.dataset.sec=String(seconds);
+      row.dataset.min=String(jnDataMinutes(seconds));
+      row.style.borderLeft='3px solid '+color;
+      const top=document.createElement('div'); top.className='dr-top';
+      const name=document.createElement('div');
+      name.className='dr-name'; name.textContent=(index+1)+'. '+block.scope;
+      const time=document.createElement('div');
+      time.className='dr-pct'; time.style.color=color; time.textContent=jnFormatDuration(seconds);
+      top.append(name,time);
+      const meta=document.createElement('div'); meta.className='dr-meta';
+      const tierTag=document.createElement('span');
+      tierTag.style.color=color; tierTag.style.fontWeight='700'; tierTag.textContent=block.tier;
+      const countTag=document.createElement('span');
+      countTag.textContent='문항 '+(Array.isArray(block.pairs)?block.pairs.length:0)+'개';
+      meta.append(tierTag,countTag);
+      row.append(top,meta); container.appendChild(row);
+    });
+  }
+  const total=document.getElementById('jn-sum-block-total');
+  if(total){
+    total.textContent=blocks.length
+      ?'· '+blocks.length+'개 · 필수·권장 '+jnFormatDuration(baseSeconds)+' / 예산 '
+        +Math.round(record.inputBudgetSec/60)+'분':'';
+  }
+  return baseSeconds;
+}
+function jnRenderSummary(record){
+  if(!record) return;
+  const budget=document.getElementById('jn-sum-budget');
+  if(budget){
+    budget.textContent='공부 '+Math.round(record.inputBudgetSec/60)+'분 · '
+      +(record.goal==='PASS'?'합격 우선':'표준');
+  }
+  const ratio=Number.isFinite(record.coverage)?Math.max(0,Math.min(1,record.coverage)):0;
+  const percent=Math.round(ratio*100);
+  const coverage=document.getElementById('jn-sum-coverage');
+  if(coverage) coverage.textContent=percent+'%';
+  const bar=document.getElementById('jn-sum-coverage-bar');
+  if(bar) bar.style.width=percent+'%';
+  jnRenderSummaryTiers(record);
+  jnRenderSummaryGain(record);
+  jnRenderSummaryBlocks(record);
+  jnRenderAdaptiveNotice(record);
+  jnRenderCompletion(record);
+  const start=document.getElementById('jn-sum-start');
+  if(start){
+    const empty=!(Array.isArray(record.blocks)&&record.blocks.length);
+    const done=record.status==='done';
+    start.textContent=done?'학습 완료':record.status==='active'?'학습 이어가기':'학습 시작';
+    start.disabled=done||empty;
+    start.style.opacity=start.disabled?'0.35':'';
+    start.style.cursor=start.disabled?'default':'';
+  }
+}
+function jnShowSummary(record){
+  if(!record) return;
+  jnStopCountdown(); jnSetSummaryNotice(''); jnRenderSummary(record);
+  show('screen-jn-summary'); jnPlaceWarning(); jnStartSummaryCountdown();
+}
+function jnExitSummary(){
+  jnStopSummaryCountdown(); show('screen-filter'); jnPlaceWarning(); renderFilter();
+}
+function jnEditSettings(){
+  jnStopSummaryCountdown(); jnRenderSettings(jnPlan);
+  show('screen-jn-settings'); jnPlaceWarning(); jnStartCountdown();
+}
+function jnRecreatePlan(){
+  if(jnPlan?.status!=='done') return false;
+  const snapshot={examAt:jnPlan.examAt,inputBudgetSec:jnPlan.inputBudgetSec,goal:jnPlan.goal};
+  jnAbort();
+  try{ localStorage.removeItem(STORAGE_KEY+'_jn_plan'); }catch{}
+  jnPlan=null; jnState='idle'; jnUpdateEntryButton();
+  jnStopSummaryCountdown(); jnRenderSettings(snapshot);
+  show('screen-jn-settings'); jnPlaceWarning(); jnStartCountdown();
+  return true;
+}
+let jnCurrentBlockId=null, jnCurrentPairs=[], jnStaged=[];
+let jnBlockElapsedBaseMs=0, jnBlockClockStartedAt=0, jnBlockHeaderTimer=null;
+let jnWindowFocused=typeof document.hasFocus==='function'?document.hasFocus():true;
+function jnClone(value){ return JSON.parse(JSON.stringify(value)); }
+function jnPairsEqual(left,right){
+  if(!Array.isArray(left)||!Array.isArray(right)||left.length!==right.length) return false;
+  return left.every((pair,index)=>pair&&right[index]&&pair.i===right[index].i&&pair.qid===right[index].qid);
+}
+function jnCurrentBlock(){
+  return jnPlan&&Array.isArray(jnPlan.blocks)?jnPlan.blocks[jnPlan.nextBlockIdx]||null:null;
+}
+function jnValidBlockPairs(pairs){
+  return Array.isArray(pairs)&&pairs.length>0&&pairs.every(pair=>pair&&Number.isInteger(pair.i)
+    &&pair.i>=0&&ALL_Q[pair.i]&&typeof pair.qid==='string'&&getQid(ALL_Q[pair.i])===pair.qid);
+}
+function jnValidStaged(staged,pairs,complete){
+  if(!Array.isArray(staged)||!jnValidBlockPairs(pairs)) return false;
+  const allowed=new Set(pairs.map(pair=>pair.i+'\u0000'+pair.qid)), seen=new Set();
+  for(const entry of staged){
+    if(!entry||!Number.isInteger(entry.i)||typeof entry.qid!=='string'
+      ||!['ok','ng','sk'].includes(entry.result)||!Number.isInteger(entry.elapsedMs)||entry.elapsedMs<0
+      ||typeof entry.day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(entry.day)
+      ||!ALL_Q[entry.i]||getQid(ALL_Q[entry.i])!==entry.qid) return false;
+    const key=entry.i+'\u0000'+entry.qid;
+    if(!allowed.has(key)||seen.has(key)) return false;
+    seen.add(key);
+  }
+  return !complete||seen.size===pairs.length;
+}
+function jnSessionElapsedMs(value){
+  if(!value||typeof value!=='object'||Array.isArray(value)) return 0;
+  return Math.round(Object.values(value).reduce((total,elapsed)=>
+    total+(Number.isFinite(Number(elapsed))&&Number(elapsed)>=0?Number(elapsed):0),0));
+}
+function jnBlockElapsedMs(){
+  const live=jnBlockClockStartedAt?Math.max(0,Date.now()-jnBlockClockStartedAt):0;
+  return Math.round(jnBlockElapsedBaseMs+live);
+}
+function jnStartBlockClock(elapsedMs){
+  jnBlockElapsedBaseMs=Math.max(0,Math.round(Number(elapsedMs)||0));
+  jnBlockClockStartedAt=jnWindowFocused&&document.visibilityState!=='hidden'?Date.now():0;
+}
+function jnSuspendBlockClock(){
+  if(jnBlockClockStartedAt){
+    jnBlockElapsedBaseMs+=Math.max(0,Date.now()-jnBlockClockStartedAt);
+    jnBlockClockStartedAt=0;
+  }
+}
+function jnResumeBlockClock(){
+  if(jnState==='inBlock'&&!jnBlockClockStartedAt&&jnWindowFocused&&document.visibilityState!=='hidden'){
+    jnBlockClockStartedAt=Date.now();
+  }
+}
+function jnTickBlockHeader(){
+  if(jnState!=='inBlock'||!jnPlan) return;
+  const badge=document.getElementById('h-mode-badge'), block=jnCurrentBlock(); if(!badge||!block) return;
+  const left=new Date(jnPlan.examAt).getTime()-Date.now();
+  badge.textContent='🌙 '+(jnPlan.nextBlockIdx+1)+'/'+jnPlan.blocks.length+' · '
+    +jnFormatDuration(jnPairsSeconds(block.pairs,ALL_Q)).replace('약 ','±')+' · '+jnFormatCountdown(left);
+}
+function jnStartBlockHeader(){
+  if(jnBlockHeaderTimer) clearInterval(jnBlockHeaderTimer);
+  document.getElementById('h-subject').textContent=APP_DATA.subject+' · 전날 블록';
+  jnTickBlockHeader(); jnBlockHeaderTimer=setInterval(jnTickBlockHeader,1000);
+}
+function jnStopBlockHeader(){
+  if(jnBlockHeaderTimer){ clearInterval(jnBlockHeaderTimer); jnBlockHeaderTimer=null; }
+  document.getElementById('h-subject').textContent=APP_DATA.subject;
+}
+function jnRestorePreviousMode(){
+  const previous=jnPlan&&['study','exam'].includes(jnPlan.previousMode)?jnPlan.previousMode:'study';
+  mode=previous; setMode(previous); applyModeChrome();
+}
+function jnReleaseBlockVolatile(){
+  jnSuspendBlockClock(); jnStopBlockHeader();
+  jnCurrentBlockId=null; jnCurrentPairs=[]; jnStaged=[];
+  jnBlockElapsedBaseMs=0; qEnter=0;
+}
+function jnOpenBlock(block,state){
+  const restored=state||{};
+  jnCurrentBlockId=block.blockId; jnCurrentPairs=jnClone(block.pairs);
+  jnStaged=jnClone(restored.staged||[]);
+  QS=block.pairs.map(pair=>ALL_Q[pair.i]);
+  qi=Math.max(0,Math.min(Number.isInteger(restored.qi)?restored.qi:0,QS.length-1));
+  results=restored.results&&typeof restored.results==='object'?jnClone(restored.results):{};
+  selOpt=null;
+  examSels=restored.examSels&&typeof restored.examSels==='object'?jnClone(restored.examSels):{};
+  graded=false;
+  sessElapsed=restored.sessElapsed&&typeof restored.sessElapsed==='object'?jnClone(restored.sessElapsed):{};
+  mode='study'; setMode('study'); jnState='inBlock';
+  applyModeChrome(); startTimer(); show('screen-quiz');
+  jnStartBlockClock(restored.elapsedMs==null?jnSessionElapsedMs(sessElapsed):restored.elapsedMs);
+  qEnter=jnWindowFocused&&document.visibilityState!=='hidden'?Date.now():0;
+  renderQ(); jnStartBlockHeader(); saveSession(); jnUpdateEntryButton(); jnHideWarning();
+  return true;
+}
+function jnStartBlock(blockIdx,preservePreviousMode){
+  if(!jnPlan||jnPlan.status==='done'||!Number.isInteger(blockIdx)) return false;
+  const block=jnPlan.blocks&&jnPlan.blocks[blockIdx];
+  if(!block||typeof block.blockId!=='string'||!jnValidBlockPairs(block.pairs)){
+    jnShowWarning('블록 정보를 확인할 수 없어 계획을 다시 확인해 주세요.'); return false;
+  }
+  const next=Object.assign({},jnPlan,{status:'active',runState:'inBlock',pausedBlock:null,
+    previousMode:preservePreviousMode?jnPlan.previousMode:mode});
+  if(!jnSavePlan(next)){
+    jnShowWarning('블록 시작 상태를 저장하지 못했습니다. 다시 시도해 주세요.'); return false;
+  }
+  jnStopSummaryCountdown(); jnPlan=next;
+  return jnOpenBlock(block,{staged:[],results:{},examSels:{},sessElapsed:{},qi:0,elapsedMs:0});
+}
+function jnRestoreSession(elapsedFloorMs){
+  const session=loadSession(), block=jnCurrentBlock();
+  const fiveWay=!!(session&&session.jn&&jnPlan&&jnPlan.status==='active'
+    &&jnPlan.runState==='inBlock'&&session.jn.planId===jnPlan.planId&&block
+    &&session.jn.blockId===block.blockId&&jnPairsEqual(session.jn.pairs,block.pairs));
+  const valid=fiveWay&&jnValidBlockPairs(block.pairs)
+    &&jnValidStaged(session.jn.staged,block.pairs,false);
+  if(!valid){ if(session) clearSession(); return false; }
+  const restoredResults=session.results&&typeof session.results==='object'?session.results:{};
+  for(const entry of session.jn.staged){
+    const index=block.pairs.findIndex(pair=>pair.i===entry.i&&pair.qid===entry.qid);
+    if(index<0||restoredResults[index]!==entry.result){ clearSession(); return false; }
+  }
+  const elapsed=Math.max(Number(elapsedFloorMs)||0,jnSessionElapsedMs(session.sessElapsed));
+  return jnOpenBlock(block,{qi:session.qi,results:restoredResults,examSels:session.examSels,
+    sessElapsed:session.sessElapsed,staged:session.jn.staged,elapsedMs:elapsed});
+}
+function jnResumePausedBlock(){
+  if(!jnPlan||jnPlan.status!=='active'||jnPlan.runState!=='paused') return false;
+  const paused=jnPlan.pausedBlock, block=jnCurrentBlock();
+  if(!paused||!block||paused.blockId!==block.blockId||!jnPairsEqual(paused.pairs,block.pairs)
+    ||!jnValidStaged(paused.staged,block.pairs,false)||!Number.isFinite(paused.elapsedMs)||paused.elapsedMs<0){
+    jnShowWarning('일시정지 기록이 올바르지 않아 현재 블록을 다시 시작합니다.');
+    const clean=Object.assign({},jnPlan,{runState:'between',pausedBlock:null});
+    if(!jnSavePlan(clean)) return false;
+    jnPlan=clean; jnState='between'; return jnStartBlock(jnPlan.nextBlockIdx,true);
+  }
+  const next=Object.assign({},jnPlan,{runState:'inBlock',pausedBlock:null});
+  if(!jnSavePlan(next)){
+    jnShowWarning('재개 상태를 저장하지 못했습니다. 다시 시도해 주세요.'); return false;
+  }
+  jnPlan=next; jnState='inBlock';
+  if(jnRestoreSession(paused.elapsedMs)) return true;
+  const restoredResults={}, restoredElapsed={};
+  for(const entry of paused.staged){
+    const index=block.pairs.findIndex(pair=>pair.i===entry.i&&pair.qid===entry.qid);
+    restoredResults[index]=entry.result; restoredElapsed[index]=entry.elapsedMs;
+  }
+  const firstOpen=block.pairs.findIndex((_,index)=>!['ok','ng','sk'].includes(restoredResults[index]));
+  return jnOpenBlock(block,{qi:firstOpen<0?block.pairs.length-1:firstOpen,results:restoredResults,
+    examSels:{},sessElapsed:restoredElapsed,staged:paused.staged,elapsedMs:paused.elapsedMs});
+}
+function jnPauseBlock(){
+  if(jnState!=='inBlock') return true;
+  flushTime(); qEnter=0; jnSuspendBlockClock(); saveSession();
+  const pausedBlock={blockId:jnCurrentBlockId,pairs:jnClone(jnCurrentPairs),
+    staged:jnClone(jnStaged),elapsedMs:jnBlockElapsedMs()};
+  const next=Object.assign({},jnPlan,{runState:'paused',pausedBlock});
+  if(!jnSavePlan(next)){
+    jnShowWarning('일시정지 상태를 저장하지 못했습니다.');
+    qEnter=Date.now(); jnResumeBlockClock(); return false;
+  }
+  jnPlan=next; jnState='paused'; jnReleaseBlockVolatile(); jnRestorePreviousMode();
+  jnUpdateEntryButton(); return true;
+}
+function jnStageAttempt(result,elapsedMs){
+  const pair=jnCurrentPairs[qi];
+  if(!pair||!['ok','ng','sk'].includes(result)||!ALL_Q[pair.i]
+    ||getQid(ALL_Q[pair.i])!==pair.qid) return false;
+  const exists=jnStaged.some(entry=>entry.i===pair.i&&entry.qid===pair.qid);
+  if(!exists) jnStaged.push({i:pair.i,qid:pair.qid,result,
+    elapsedMs:Math.max(0,Math.round(elapsedMs||0)),day:todayStr()});
+  saveSession();
+  return true;
+}
+function jnBuildAttemptSnapshots(stats,daily,staged){
+  const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
+  const statsSnapshot=object(stats)?jnClone(stats):{}, dailySnapshot=object(daily)?jnClone(daily):{};
+  for(const entry of Array.isArray(staged)?staged:[]){
+    const stat=statsSnapshot[entry.qid]||{a:0,c:0,e:0};
+    stat.a+=1; if(entry.result==='ok') stat.c+=1; stat.e+=Math.round(entry.elapsedMs||0);
+    statsSnapshot[entry.qid]=stat;
+    const day=dailySnapshot[entry.day]||{a:0,c:0};
+    day.a+=1; if(entry.result==='ok') day.c+=1; dailySnapshot[entry.day]=day;
+  }
+  return {statsSnapshot,dailySnapshot};
+}
+function jnBuildFinalPlanSnapshot(plan,blockId,actualMs,completedAt){
+  const nextBlockIdx=plan.nextBlockIdx+1;
+  const doneBlockIds=plan.doneBlockIds.includes(blockId)
+    ?plan.doneBlockIds.slice():[...plan.doneBlockIds,blockId];
+  const perBlock=Object.assign({},plan.perBlock);
+  perBlock[blockId]={actualMs,completedAt};
+  const snapshot=Object.assign({},plan,{
+    status:nextBlockIdx>=plan.blocks.length?'done':'active',
+    runState:'between',pausedBlock:null,pendingCommit:null,nextBlockIdx,doneBlockIds,perBlock,
+    totalActiveMs:plan.totalActiveMs+actualMs,revision:plan.revision
+  });
+  const drift=jnComputeDrift(plan,snapshot.totalActiveMs,snapshot.doneBlockIds);
+  if(Math.abs(drift)>=JN_CFG.DRIFT_TRIGGER_SEC*1000){
+    const remainingSec=jnRemainingSec(plan,snapshot.totalActiveMs,completedAt);
+    const selectedScopes=[...new Set(plan.pairs.map(pair=>ALL_Q[pair.i]?.scope).filter(Boolean))];
+    const ctx=jnSubjectContext(ALL_Q);
+    const candidates=jnCandidates(ALL_Q,selectedScopes,ctx);
+    const replanned=jnReplan(Object.assign({},snapshot,{tiers:plan.tiers,blocks:plan.blocks}),
+      remainingSec,candidates,JN_CFG,ctx);
+    Object.assign(snapshot,{status:nextBlockIdx>=replanned.blocks.length?'done':'active',
+      tiers:replanned.tiers,blocks:replanned.blocks,
+      coverage:replanned.coverage,overBudget:replanned.overBudget,revision:plan.revision+1,
+      baselineActiveMs:snapshot.totalActiveMs,
+      baselineExpectedDoneMs:jnExpectedDoneMs(plan,snapshot.doneBlockIds),
+      baselineDoneBlockIds:snapshot.doneBlockIds.slice()});
+  }else{
+    snapshot.overBudget=plan.overBudget||false;
+  }
+  return snapshot;
+}
+function jnReadStorageMap(key){
+  try{
+    const value=JSON.parse(localStorage.getItem(key)||'{}');
+    return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+  }catch{ return {}; }
+}
+function jnValidPending(pending){
+  const object=value=>value&&typeof value==='object'&&!Array.isArray(value);
+  const block=jnCurrentBlock();
+  if(!object(pending)||!jnPlan||jnPlan.status!=='active'||jnPlan.runState!=='inBlock'||!block
+    ||pending.planId!==jnPlan.planId||pending.blockId!==block.blockId
+    ||pending.revision!==jnPlan.revision
+    ||pending.commitId!==jnPlan.planId+'|'+block.blockId+'|'+jnPlan.revision
+    ||!Number.isFinite(pending.commitAt)||pending.commitAt<=0
+    ||!Number.isFinite(pending.actualMs)||pending.actualMs<0
+    ||!jnValidStaged(pending.staged,block.pairs,true)
+    ||!object(pending.statsSnapshot)||!object(pending.dailySnapshot)
+    ||!object(pending.finalPlanSnapshot)) return false;
+  const finalPlan=pending.finalPlanSnapshot;
+  const validation=jnValidatePlan(finalPlan,ALL_Q,STORAGE_KEY);
+  return validation.valid&&finalPlan.planId===jnPlan.planId&&finalPlan.pendingCommit===null
+    &&finalPlan.pausedBlock===null&&finalPlan.runState==='between'
+    &&finalPlan.nextBlockIdx===jnPlan.nextBlockIdx+1
+    &&finalPlan.revision===jnPlan.revision
+    &&finalPlan.totalActiveMs===jnPlan.totalActiveMs+pending.actualMs
+    &&finalPlan.doneBlockIds.includes(block.blockId)
+    &&finalPlan.perBlock&&finalPlan.perBlock[block.blockId]
+    &&finalPlan.perBlock[block.blockId].actualMs===pending.actualMs;
+}
+function jnFinishAppliedCommit(pending,navigate){
+  const finalPlan=pending.finalPlanSnapshot;
+  if(!jnSavePlan(finalPlan)) return false;
+  jnPlan=finalPlan; jnState=finalPlan.runState;
+  clearSession(); jnReleaseBlockVolatile(); jnRestorePreviousMode();
+  jnUpdateEntryButton(); jnHideWarning();
+  if(navigate) jnShowSummary(jnPlan);
+  return true;
+}
+function jnApplyPending(pending,navigate){
+  try{
+    localStorage.setItem(STAT_KEY,JSON.stringify(pending.statsSnapshot));
+    localStorage.setItem(DAILY_KEY,JSON.stringify(pending.dailySnapshot));
+  }catch{ return false; }
+  return jnFinishAppliedCommit(pending,navigate);
+}
+function jnDiscardPending(){
+  const clean=Object.assign({},jnPlan,{pendingCommit:null});
+  if(!jnSavePlan(clean)){
+    jnShowWarning('저장 실패 — 완료 처리를 재시도해 주세요'); return false;
+  }
+  jnPlan=clean; jnState=clean.runState;
+  jnShowWarning('완료 대기 기록이 올바르지 않아 폐기했습니다.');
+  return true;
+}
+function jnRecoverPending(){
+  if(!jnPlan||!jnPlan.pendingCommit) return true;
+  const pending=jnPlan.pendingCommit;
+  if(!jnValidPending(pending)) return jnDiscardPending();
+  if(!jnSavePlan(jnPlan)||!jnApplyPending(pending,false)){
+    jnShowWarning('저장 실패 — 완료 처리를 재시도해 주세요'); return false;
+  }
+  return true;
+}
+function jnFirstUnconfirmed(){
+  return QS.findIndex((_,index)=>!['ok','ng','sk'].includes(results[index]));
+}
+function jnReturnToUnconfirmed(index){
+  qi=index; qEnter=Date.now(); jnResumeBlockClock(); renderQ();
+  jnShowWarning('모든 문항을 확인하거나 건너뛰어야 블록이 완료됩니다');
+}
+function jnCommitBlock(){
+  if(jnState!=='inBlock'||!jnPlan) return false;
+  flushTime(); qEnter=0; stopTimer(); jnSuspendBlockClock();
+  const unconfirmed=jnFirstUnconfirmed();
+  if(unconfirmed!==-1){ jnReturnToUnconfirmed(unconfirmed); return false; }
+  const block=jnCurrentBlock();
+  if(!block||block.blockId!==jnCurrentBlockId||!jnPairsEqual(block.pairs,jnCurrentPairs)
+    ||!jnValidStaged(jnStaged,block.pairs,true)){
+    jnShowWarning('확인한 답안의 저장 상태가 일치하지 않습니다. 블록을 다시 확인해 주세요.');
+    return false;
+  }
+  let pending=jnPlan.pendingCommit;
+  if(pending&&!jnValidPending(pending)){ jnDiscardPending(); return false; }
+  if(!pending){
+    const commitAt=Date.now(), actualMs=jnBlockElapsedMs();
+    const snapshots=jnBuildAttemptSnapshots(jnReadStorageMap(STAT_KEY),
+      jnReadStorageMap(DAILY_KEY),jnStaged);
+    const finalPlanSnapshot=jnBuildFinalPlanSnapshot(jnPlan,block.blockId,actualMs,commitAt);
+    const pendingRevision=finalPlanSnapshot.revision;
+    pending={planId:jnPlan.planId,
+      commitId:jnPlan.planId+'|'+block.blockId+'|'+pendingRevision,
+      blockId:block.blockId,revision:pendingRevision,commitAt,staged:jnClone(jnStaged),actualMs,
+      statsSnapshot:snapshots.statsSnapshot,dailySnapshot:snapshots.dailySnapshot,
+      finalPlanSnapshot};
+    jnPlan=Object.assign({},jnPlan,{revision:pendingRevision,pendingCommit:pending});
+  }
+  if(!jnSavePlan(jnPlan)){
+    jnShowWarning('저장 실패 — 완료 처리를 재시도해 주세요'); return false;
+  }
+  if(!jnApplyPending(pending,true)){
+    jnShowWarning('저장 실패 — 완료 처리를 재시도해 주세요'); return false;
+  }
+  return true;
+}
+function jnGuardedAction(action,blockedValue){
+  return function(...args){
+    if(jnPlan&&jnPlan.pendingCommit&&!jnRecoverPending()){
+      jnShowWarning('저장 실패 — 완료 처리를 재시도해 주세요'); return blockedValue;
+    }
+    return action.apply(this,args);
+  };
+}
+function jnAbort(){
+  const previous=jnPlan&&['study','exam'].includes(jnPlan.previousMode)?jnPlan.previousMode:'study';
+  stopTimer(); jnReleaseBlockVolatile(); mode=previous; setMode(previous); applyModeChrome();
+  jnState='idle'; jnUpdateEntryButton();
+}
+function jnAfterSuccessfulImport(importedData){
+  jnAbort();
+  if(!importedData||typeof importedData._jn_plan!=='string'){
+    try{ localStorage.removeItem(STORAGE_KEY+'_jn_plan'); }catch{}
+  }
+  jnPlan=jnLoadPlan();
+  const states=new Set(['planning','between','inBlock','paused']);
+  jnState=jnPlan&&states.has(jnPlan.runState)?jnPlan.runState:'idle';
+  jnUpdateEntryButton();
+}
+function jnCallImportWithCompletion(original,context,args){
+  const NativeFileReader=window.FileReader;
+  function WrappedFileReader(){
+    const reader=new NativeFileReader(); let assigned=null;
+    Object.defineProperty(reader,'onload',{configurable:true,
+      get(){ return assigned; },
+      set(handler){
+        assigned=handler;
+        reader.addEventListener('load',event=>{
+          let parsed=null;
+          try{ parsed=JSON.parse(reader.result); }catch{}
+          handler.call(reader,event);
+          const msg=document.getElementById('imp-msg');
+          if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&msg
+            &&msg.textContent.includes('복원 완료')) jnAfterSuccessfulImport(parsed.data||{});
+        },{once:true});
+      }
+    });
+    return reader;
+  }
+  WrappedFileReader.prototype=NativeFileReader.prototype;
+  window.FileReader=WrappedFileReader;
+  try{ return original.apply(context,args); }
+  finally{ window.FileReader=NativeFileReader; }
+}
+const _jnOrigOrderQS=orderQS;
+orderQS=function(list){ return jnState==='inBlock'?list.slice():_jnOrigOrderQS(list); };
+const _jnOrigRecordAttempt=recordAttempt;
+recordAttempt=function(q,result,elapsedMs){
+  if(jnState==='inBlock'){
+    if(result!=='un') jnStageAttempt(result,elapsedMs);
+    return;
+  }
+  return _jnOrigRecordAttempt(q,result,elapsedMs);
+};
+const _jnOrigSaveSession=saveSession;
+saveSession=function(){
+  if(jnState==='inBlock'){
+    try{
+      if(!QS.length||!jnPlan||!jnCurrentBlockId) return;
+      const payload={mode,ids:QS.map(getQid),qi,results,examSels,sessElapsed,graded,
+        jn:{planId:jnPlan.planId,blockId:jnCurrentBlockId,
+          pairs:jnClone(jnCurrentPairs),staged:jnClone(jnStaged)}};
+      localStorage.setItem(SESS_KEY,JSON.stringify(payload));
+    }catch{}
+    return;
+  }
+  return _jnOrigSaveSession();
+};
+const _jnOrigGoFilter=goFilter;
+goFilter=jnGuardedAction(function(){
+  if(!jnPauseBlock()) return;
+  return _jnOrigGoFilter.apply(this,arguments);
+});
+const _jnOrigStartSessionWith=startSessionWith;
+startSessionWith=jnGuardedAction(function(list){
+  if(!jnPauseBlock()) return false;
+  return _jnOrigStartSessionWith.call(this,list);
+},false);
+const _jnOrigRetryWrong=retryWrong;
+retryWrong=jnGuardedAction(function(){
+  if(!jnPauseBlock()) return;
+  return _jnOrigRetryWrong.apply(this,arguments);
+});
+const _jnOrigStartFlagged=startFlagged;
+startFlagged=jnGuardedAction(function(){
+  if(!jnPauseBlock()) return;
+  return _jnOrigStartFlagged.apply(this,arguments);
+});
+const _jnOrigGoDash=goDash;
+goDash=jnGuardedAction(function(){
+  if(!jnPauseBlock()) return;
+  return _jnOrigGoDash.apply(this,arguments);
+});
+const _jnOrigDoReset=doReset;
+doReset=function(key){
+  if(key!=='stat') return _jnOrigDoReset.apply(this,arguments);
+  return jnGuardedAction(function(){
+    jnAbort();
+    try{ localStorage.removeItem(STORAGE_KEY+'_jn_plan'); }catch{}
+    jnPlan=null; jnState='idle'; jnUpdateEntryButton();
+    return _jnOrigDoReset.apply(this,arguments);
+  }).apply(this,arguments);
+};
+const _jnOrigImportProgress=importProgress;
+importProgress=jnGuardedAction(function(){
+  return jnCallImportWithCompletion(_jnOrigImportProgress,this,arguments);
+});
+const _jnOrigEndSession=endSession;
+endSession=function(){
+  if(jnState==='inBlock') return jnCommitBlock();
+  return _jnOrigEndSession.apply(this,arguments);
+};
+const _jnOrigGradeExam=gradeExam;
+gradeExam=function(){
+  if(jnState==='inBlock') return jnCommitBlock();
+  return _jnOrigGradeExam.apply(this,arguments);
+};
+const _jnOrigRefreshResumeBtn=refreshResumeBtn;
+refreshResumeBtn=function(){
+  const session=loadSession(), button=document.getElementById('btn-resume');
+  if(session&&session.jn){ if(button) button.style.display='none'; return; }
+  return _jnOrigRefreshResumeBtn.apply(this,arguments);
+};
+const _jnOrigResumeSession=resumeSession;
+resumeSession=function(){
+  const session=loadSession();
+  if(session&&session.jn){ refreshResumeBtn(); return; }
+  return _jnOrigResumeSession.apply(this,arguments);
+};
+document.addEventListener('visibilitychange',()=>{
+  if(jnState!=='inBlock') return;
+  if(document.visibilityState==='hidden'){
+    flushTime(); qEnter=0; jnSuspendBlockClock(); saveSession();
+  }else{
+    qEnter=Date.now(); jnResumeBlockClock();
+  }
+});
+window.addEventListener('blur',()=>{
+  jnWindowFocused=false;
+  if(jnState==='inBlock'){ flushTime(); qEnter=0; jnSuspendBlockClock(); saveSession(); }
+});
+window.addEventListener('focus',()=>{
+  jnWindowFocused=true;
+  if(jnState==='inBlock'){ qEnter=Date.now(); jnResumeBlockClock(); }
+});
+window.addEventListener('pagehide',()=>{
+  if(jnState==='inBlock'){ flushTime(); qEnter=0; jnSuspendBlockClock(); saveSession(); }
+});
+function jnStartStudy(){
+  if(!jnPlan||!Array.isArray(jnPlan.blocks)||!jnPlan.blocks.length) return false;
+  if(jnPlan.pendingCommit&&!jnRecoverPending()){
+    jnShowWarning('저장 실패 — 완료 처리를 재시도해 주세요'); return false;
+  }
+  if(jnPlan.status==='planning'){
+    const next=Object.assign({},jnPlan,{status:'active',runState:'between'});
+    if(!jnSavePlan(next)){
+      jnShowWarning('계획을 저장하지 못했습니다. 저장 공간을 확인한 뒤 다시 시도하세요.');
+      return false;
+    }
+    jnPlan=next; jnState='between'; jnUpdateEntryButton(); jnHideWarning();
+  }
+  jnSetSummaryNotice('');
+  if(jnState==='paused') return jnResumePausedBlock();
+  if(jnState==='inBlock') return jnRestoreSession()||jnStartBlock(jnPlan.nextBlockIdx,true);
+  if(jnState==='between'&&jnPlan.status==='active') return jnStartBlock(jnPlan.nextBlockIdx,false);
+  return false;
+}
+function jnInit(){
+  // 📊 누적 통계 옆(.hero-acts)에 붙인다 — 둘 다 '다른 화면으로 가는' 진입점.
+  // .f-tools(검색·이어풀기·약점 집중)에 붙이면 좁은 화면에서 혼자 다음 줄로 밀린다.
+  const host=document.querySelector('.hero-acts')||document.querySelector('.f-tools');
+  if(host&&!document.getElementById('btn-jn')){
+    const button=document.createElement('button');
+    button.className='btn-dash'; button.id='btn-jn'; button.type='button';
+    button.title='시험 전날 학습 계획 만들기'; button.addEventListener('click',jnEnter);
+    host.appendChild(button);
+  }
+  jnPlan=jnLoadPlan();
+  const states=new Set(['planning','between','inBlock','paused']);
+  jnState=jnPlan&&states.has(jnPlan.runState)?jnPlan.runState:'idle';
+  const hadPending=!!(jnPlan&&jnPlan.pendingCommit);
+  const pendingWasValid=hadPending&&jnValidPending(jnPlan.pendingCommit);
+  if(hadPending) jnRecoverPending();
+  jnUpdateEntryButton();
+  const examInput=document.getElementById('jn-examat');
+  if(examInput) examInput.addEventListener('input',()=>{ jnSetError('jn-examat-error',''); jnTickCountdown(); });
+  const budgetInput=document.getElementById('jn-budget-min');
+  if(budgetInput) budgetInput.addEventListener('input',()=>jnSetError('jn-budget-error',''));
+  const goalInput=document.getElementById('jn-goal');
+  if(goalInput) goalInput.addEventListener('change',()=>jnSetError('jn-goal-error',''));
+  for(const id of ['jn-back-top','jn-back-bottom']){
+    const button=document.getElementById(id); if(button) button.addEventListener('click',jnExitSettings);
+  }
+  for(const id of ['jn-sum-back','jn-sum-back-bottom']){
+    const button=document.getElementById(id); if(button) button.addEventListener('click',jnExitSummary);
+  }
+  const editButton=document.getElementById('jn-sum-edit');
+  if(editButton) editButton.addEventListener('click',jnEditSettings);
+  const startButton=document.getElementById('jn-sum-start');
+  if(startButton) startButton.addEventListener('click',jnStartStudy);
+  const recreateButton=document.getElementById('jn-sum-recreate');
+  if(recreateButton) recreateButton.addEventListener('click',jnRecreatePlan);
+  const form=document.getElementById('jn-settings-form');
+  if(form) form.addEventListener('submit',event=>{ event.preventDefault(); jnSaveSettings(); });
+  if(jnPlan&&jnState==='inBlock'&&!jnPlan.pendingCommit&&(!hadPending||pendingWasValid)){
+    queueMicrotask(()=>{
+      if(jnPlan&&jnState==='inBlock'&&!jnPlan.pendingCommit&&!jnRestoreSession())
+        jnStartBlock(jnPlan.nextBlockIdx,true);
+    });
+  }
+}
+PROGRESS_SUFFIXES.push('_jn_plan');
+jnInit();
+/* JEONNAL:END */
+
+// ─────────── INIT ───────────
+loadPrefs(); renderOptToggles();
+applyFont(loadSched().font);   // 첫 렌더부터 저장된 글자 크기 반영(깜박임 방지)
+renderFilter();
+</script>
+</body>
+</html>
