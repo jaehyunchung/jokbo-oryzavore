@@ -129,15 +129,16 @@ def _marker_index(tok):
 
 
 def integrity_check(SCOPES):
-    """구조 무결성 검사. (errors, warns) 반환. 에러는 빌드를 막는다.
+    """구조 무결성 검사. (errors, warns, qid_clashes) 반환. 에러는 빌드를 막는다.
 
-    검사: 정답 인덱스 범위·중복, verified↔answers 일치, flag 그룹 상호배타,
+    검사: 정답 인덱스 범위·중복, verified↔answers 일치, flag 그룹 상호배타, 뷰어 qid 충돌,
           images↔image_captions 길이, years 형식, 정정/논쟁 source 필수(에러),
           STEM_IMAGE_A_PRESENT↔실제 이미지(에러), IMAGE_MISSING↔image_missing 설명,
           선지 마커 연속성, 해설의 마크다운 잔존, 동일 stem 중복(경고).
     """
-    errors, warns = [], []
+    errors, warns, qid_clashes = [], [], []
     seen = {}   # 정규화 stem → 최초 위치 tag (중복 탐지)
+    qids = {}   # 뷰어 qid → 최초 위치 tag (진도 키 충돌 탐지)
     for head, qs in SCOPES:
         sc = schema.clean_scope(head)
         for q in qs:
@@ -225,7 +226,16 @@ def integrity_check(SCOPES):
                 if key in seen and seen[key] != tag:
                     warns.append("%s — 동일 stem 이 %s 와 중복(의도된 변형이면 무시)" % (tag, seen[key]))
                 seen.setdefault(key, tag)
-    return errors, warns
+
+            # ../kd_library/viewer_template.html 의 getQid() 와 같은 식이어야 한다(한쪽만 바꾸면 어긋남).
+            qid = "%s||%s||%s" % (sc, q.get('meta') or '', (q.get('stem') or '')[:60])
+            if qid in qids:
+                qid_clashes.append(
+                    "%s — 뷰어 qid 충돌: %s 와 scope·meta·stem 앞 60자가 같음. "
+                    "두 문항의 진도·🚩·복습 스케줄이 서로 덮어쓴다. 같은 해 두 복원본이면 "
+                    "한쪽 meta 에 구분을 넣을 것(예 '2022 (다른 복원본) · 홍길동')." % (tag, qids[qid]))
+            qids.setdefault(qid, tag)
+    return errors, warns, qid_clashes
 
 
 def gate_detail(SCOPES):
@@ -269,6 +279,8 @@ def main():
     ap.add_argument('--strict-detail', action='store_true', help='자세한 authoring 미달을 에러로')
     ap.add_argument('--strict-meta', action='store_true', help='교수명 과/교실명 포함을 에러로')
     ap.add_argument('--strict-scope', action='store_true', help='범위 오배치 의심을 에러로')
+    ap.add_argument('--strict-qid', action='store_true',
+                    help='뷰어 진도 키(scope+meta+stem) 충돌을 에러로 — 신규 과목 권장')
     ap.add_argument('--no-nospoiler', action='store_true', help='no-spoiler 정보 섹션 건너뜀')
     ap.add_argument('--no-coverage', action='store_true', help='커버리지 정보 섹션 건너뜀')
     args = ap.parse_args()
@@ -287,11 +299,17 @@ def main():
     errors += sch_err
 
     # 구조 무결성(항상 ON) — 의학정확성 이전의 데이터 일관성
-    int_err, int_warn = integrity_check(SCOPES)
+    int_err, int_warn, qid_clashes = integrity_check(SCOPES)
     if int_err:
         section("무결성: 정답범위·flag배타·길이·연도·출처 오류", int_err, 'err')
     errors += int_err
     warns += int_warn
+
+    if args.strict_qid:
+        section("strict-qid: 뷰어 진도 키 충돌", qid_clashes, 'err')
+        errors += qid_clashes
+    else:
+        warns += qid_clashes
 
     if args.strict_detail:
         d = gate_detail(SCOPES)

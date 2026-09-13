@@ -17,7 +17,8 @@ echo "==== 2) 파이썬 회귀 테스트 ===="
 run "extract.count/split_blind_key"     python3 jokbo_pipeline/tests/test_extract.py
 run "extract_cols 2단 분리"             python3 jokbo_pipeline/tests/test_extract_cols.py
 run "v2 파싱 6대 개선(extract helpers)"  python3 jokbo_pipeline/tests/test_extract_improvements.py
-run "validate 무결성(정답범위·flag·이미지·마크다운)" python3 jokbo_pipeline/tests/test_validate_integrity.py
+run "validate 무결성(정답범위·flag·이미지·마크다운·qid충돌)" python3 jokbo_pipeline/tests/test_validate_integrity.py
+run "imgwork 도판 재배치(slot 충돌·화소예산)" python3 jokbo_pipeline/tests/test_imgwork.py
 run "llm_segment 포인터맵 절단·검증"     python3 jokbo_pipeline/tests/test_llm_segment.py
 run "schema + build.detail_gaps"         python3 jokbo_pipeline/tests/test_builders.py
 run "batch_stats 배치 통계"              python3 jokbo_pipeline/tests/test_batch_stats.py

@@ -30,6 +30,7 @@
 | `nospoiler_audit.py` | 정답 노출 감사 |
 | `merge_rtype.py` | 왕족 변형 병합 → R형 초안 (authoring 보조) |
 | `extract_cols.py` | 2단 조판 좌/우 단 분리 추출 CLI |
+| `imgwork.py` | **도판 재배치** — 페이지 렌더를 정본으로 삼아 비율 좌표로 다시 자른다(7.2) |
 | `batch_stats.py` | 연도·필드·왕족·범위 상태 집계 CLI |
 | `questions_data_template.py` | 문항 dict 템플릿 + 빈 `SCOPES` |
 
@@ -180,8 +181,26 @@ python3 validate.py --data "$WORK/questions_data.py" --raw "$WORK/all_questions.
 | `--strict-detail` | 자세한 authoring 미달 (아래 4.3) |
 | `--strict-meta` | `meta` 교수란에 과/교실명이 붙어 있음 |
 | `--strict-scope` | 범위 오배치 의심 (아래 4.4) |
+| `--strict-qid` | **뷰어 진도 키 충돌** (아래 4.5) |
 
-기본 OFF 라서 기존 데이터 빌드는 깨지지 않는다. **새 과목은 셋 다 켜서 작업**한다.
+기본 OFF 라서 기존 데이터 빌드는 깨지지 않는다. **새 과목은 넷 다 켜서 작업**한다.
+
+### 4.5 `--strict-qid` — 뷰어 진도 키 충돌
+
+뷰어는 `scope + meta + stem 앞 60자` 를 문항 키(`getQid`)로 써서 진도·🚩·복습 스케줄을 저장한다.
+이 셋이 같은 문항이 둘 있으면 **두 문항의 기록이 서로 덮어쓴다.** 빌드는 성공하고 뷰어도 열리므로
+쓰다가 "풀었는데 기록이 없다"로만 드러난다.
+
+전형은 **같은 해 같은 문항을 두 사람이 각각 복원한 경우**다(2.7 참조). 선지 문면과 정답이 갈리므로
+합치면 안 되고, 그대로 두면 키가 충돌한다. → **한쪽 `meta` 에 구분을 넣는다.**
+
+```python
+"meta": "2022 · 홍길동"                  # 한 판본
+"meta": "2022 (다른 복원본) · 홍길동"      # 다른 판본 — 키가 갈라지고 표시도 친절해진다
+```
+
+`meta` 끝의 `· 이름` 형식만 지키면 교수명 정규화(2.6)는 그대로 동작한다.
+⚠ 검사식은 `../kd_library/viewer_template.html` 의 `getQid()` 미러다. **한쪽만 고치면 어긋난다.**
 
 ### 4.3 `--strict-detail` 기준
 
@@ -310,6 +329,37 @@ python3 extract_cols.py --pdf "<pdf>" --out-dir _pages --first 1 --last 20
 - 다년도 병합 문항에는 대표 1장만.
 - **`candidate_images` 는 y좌표 추정일 뿐이다.** 그대로 믿으면 엉뚱한 문항에 붙는다. 페이지를 렌더해 눈으로 확인한다.
 
+### 7.2 `imgwork.py` — 페이지 렌더 기준 재배치 (도판이 많은 족보의 기본 경로)
+
+`pdfimages` 추출본을 그대로 쓰면 **마스크 깨짐 · 200px 미만 조각 · 오배치 · 여러 장 문항의 순서
+뒤바뀜**이 남는다(한 과목에서 네 가지가 전부 나왔다). 추출본을 버리고 페이지 렌더에서 다시 자른다.
+
+```bash
+python3 imgwork.py render --work "$WORK/_imgwork" --src jokbo --pdf "$SUBJ/족보.pdf"
+#   → 150 dpi 페이지 PNG. 원본 시험지 등 출처가 여럿이면 --src 를 달리해 여러 번.
+#   → 이미 400 dpi 렌더가 있으면 --hires-dir 로 넘겨 크롭에 재사용한다.
+
+# 사람(또는 멀티모달 에이전트)이 페이지를 보고 _imgwork/pages/<src>_pNNN.json 을 쓴다.
+python3 imgwork.py find --data "$WORK/questions_data.py" --query "문항의 특징적인 문구"   # qid 찾기
+
+python3 imgwork.py apply --work "$WORK/_imgwork" --data "$WORK/questions_data.py" \
+                         --out-images "$SUBJ/images"
+#   → 400 dpi 렌더에서 비율 크롭 → 화소 예산 축소 → image_map.json + 도판색인.md
+```
+
+**판정할 때 걸리는 것들:**
+
+| 규칙 | 왜 |
+|---|---|
+| `slot` 은 **인쇄된 라벨 번호**를 쓴다 | 2단 조판에서 오른쪽 단 위쪽 그림이 먼저 추출된다. 추출 순서를 따르면 `① 사진 1 … ⑤ 사진 5` 대응이 깨진다 |
+| **문두가 그림을 가리키면 위치를 무시한다** | 복원 과정에서 그림이 해설 아래로 밀려 내려간다. `다음은 … 이다`·`A~D 중`·`화살표가` 인데 `spoiler` 로 빼면 **문항이 풀 수 없는 상태**가 된다 |
+| 한 도판이 **여러 문항**에 걸릴 수 있다 | 주제별 단위와 원본 시험지 부록에 같은 문항이 함께 실린다. `qid` 를 배열로 준다 |
+| 충돌 단위는 페이지가 아니라 **(문항, slot)** | 한 문항의 도판이 페이지 경계를 넘어 이어지는 것은 정상이다 |
+| 크기는 **화소수**로 제한한다 | 뷰어가 base64 인라인해 +34% 된다. 긴 변만 막으면 가로로 긴 다패널 크롭이 커진다 |
+
+`apply` 는 **문항 데이터에 써 넣지 않는다.** `image_map.json`(qid → 파일들)만 주고, 반영은 과목
+작업 폴더의 스크립트가 한다 — 과목마다 데이터 구성이 다르기 때문이다.
+
 ### 7.1 유실 도판 보강
 
 원본 그림이 PDF 에 없을 때 둘 중 하나로 보강한다. **둘 다 정답을 노출하지 않게** 한다(3.2 참조).
@@ -416,7 +466,8 @@ soffice --headless --convert-to pdf --outdir "$WORK" "$SUBJ/<과목> 족보_재�
 |---|---|
 | `tests/test_builders.py` | schema 헬퍼 + `build.detail_gaps`(strict-detail 게이트) + `scope_status` |
 | `tests/test_extract.py` · `test_extract_improvements.py` · `test_extract_cols.py` | 추출 헬퍼·파싱 개선·2단 분리 |
-| `tests/test_validate_integrity.py` | 무결성 검사(정답 범위·flag·이미지·마크다운) |
+| `tests/test_validate_integrity.py` | 무결성 검사(정답 범위·flag·이미지·마크다운·뷰어 qid 충돌) |
+| `tests/test_imgwork.py` | 도판 재배치((문항, slot) 충돌 정리·화소 예산) |
 | `tests/test_llm_segment.py` | 포인터맵 절단·검증 |
 | `tests/test_batch_stats.py` | 배치 통계 집계 |
 | `tests/test_main_lifecycle.py` | `main.py` 단계 연결 |

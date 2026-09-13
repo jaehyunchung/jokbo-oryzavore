@@ -30,12 +30,12 @@ def ok(cond, msg):
 
 
 def _errs(q):
-    e, _w = integrity_check([("범위", [q])])
+    e, _w, _c = integrity_check([("범위", [q])])
     return " ".join(e)
 
 
 def _warns(q):
-    _e, w = integrity_check([("범위", [q])])
+    _e, w, _c = integrity_check([("범위", [q])])
     return " ".join(w)
 
 
@@ -97,9 +97,26 @@ ok(_errs(good(years=["2021", "2019"])) == "", "정상 연도는 통과")
 # 동일 stem 중복 → 경고(에러 아님)
 dup_scope = [("범위", [good(stem="완전히 같은 문항 본문입니다"),
                        good(stem="완전히 같은 문항 본문입니다", meta="2022 · 김철수")])]
-e, w = integrity_check(dup_scope)
+e, w, c = integrity_check(dup_scope)
 ok(e == [], "동일 stem 중복은 빌드 차단(에러) 아님")
 ok(any("중복" in x for x in w), "동일 stem 중복은 경고로 보고")
+ok(c == [], "stem 이 같아도 meta 가 다르면 뷰어 qid 는 충돌하지 않음")
+
+# ── 뷰어 qid 충돌 (scope+meta+stem 앞 60자) — 진도·🚩 가 서로 덮어쓴다 ──────────
+clash = [("범위", [good(stem="같은 해 두 복원본이 실린 문항입니다", verified="①"),
+                   good(stem="같은 해 두 복원본이 실린 문항입니다", verified="③")])]
+e, _w, c = integrity_check(clash)
+ok(e == [], "qid 충돌은 integrity 에러가 아니라 별도 목록으로 분리(opt-in 게이트)")
+ok(len(c) == 1 and "qid 충돌" in c[0], "scope·meta·stem 이 같으면 qid 충돌로 보고")
+
+_e, _w, c = integrity_check([("범위", [good(stem="같은 해 두 복원본이 실린 문항입니다"),
+                                      good(stem="같은 해 두 복원본이 실린 문항입니다",
+                                           meta="2023 (다른 복원본) · 홍길동")])])
+ok(c == [], "한쪽 meta 에 구분을 넣으면 충돌이 해소된다")
+
+_e, _w, c = integrity_check([("A범위", [good(stem="범위만 다른 같은 문항")]),
+                             ("B범위", [good(stem="범위만 다른 같은 문항")])])
+ok(c == [], "범위가 다르면 qid 가 달라 충돌 아님")
 
 # ── 이미지 플래그 ↔ 실제 데이터 정합성 ──────────────────────────────────────
 ok("STEM_IMAGE_A_PRESENT 인데" in _errs(good(flags=["STEM_IMAGE_A_PRESENT"])),
