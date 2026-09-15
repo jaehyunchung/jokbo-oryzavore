@@ -1,0 +1,52 @@
+SOLVED = [
+    {
+        "qid": "u01_예시단위#000",
+        "verified": "③",
+        "confidence": "high",
+        "blind_note": "세 번째 순서가 조건과 맞는다.",
+        "option_judgments": ["① 거짓", "② 거짓", "③ 참", "④ 거짓", "⑤ 거짓"],
+    },
+    {
+        "qid": "u01_예시단위#001",
+        "verified": "②, ④",
+        "answers": ["②", "④"],
+        "confidence": "high",
+        "blind_note": "두 번째와 네 번째 조건이 함께 맞는다.",
+        "option_judgments": ["① 거짓", "② 참", "③ 거짓", "④ 참"],
+    },
+    {
+        "qid": "u01_예시단위#002",
+        "verified": "예시답안",
+        "confidence": "medium",
+        "blind_note": "서술형 약칭을 그대로 적는다.",
+        "option_judgments": [],
+    },
+    {
+        "qid": "u01_예시단위#003",
+        "verified": "①",
+        "confidence": "high",
+        "blind_note": "빈칸의 시작 순서는 첫 번째다.",
+        "option_judgments": ["① 참", "② 거짓", "③ 거짓", "④ 거짓", "⑤ 거짓"],
+    },
+    {
+        "qid": "u01_예시단위#005",
+        "verified": "②",
+        "confidence": "medium",
+        "blind_note": "정리의 첫 단계는 두 번째 표기다.",
+        "option_judgments": ["① 거짓", "② 참", "③ 거짓", "④ 거짓"],
+    },
+    {
+        "qid": "u01_예시단위#006",
+        "verified": "①",
+        "confidence": "low",
+        "blind_note": "기본 순서는 첫 번째 표기로 판단했다.",
+        "option_judgments": ["① 참", "② 거짓", "③ 거짓", "④ 거짓", "⑤ 거짓"],
+    },
+    {
+        "qid": "u01_예시단위#007",
+        "verified": "③",
+        "confidence": "medium",
+        "blind_note": "코드 C6은 세 번째 표기로 판단했다.",
+        "option_judgments": ["① 거짓", "② 거짓", "③ 참", "④ 거짓"],
+    },
+]

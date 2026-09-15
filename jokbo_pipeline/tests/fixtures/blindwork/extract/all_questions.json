@@ -1,0 +1,46 @@
+[
+  {
+    "idx": 1,
+    "page": 1,
+    "year": "2025",
+    "dept_prof": "예시과 홍길동",
+    "scope": "예시단원 A",
+    "stem": "예시단원 A의 첫 순서를 고르시오.",
+    "options": ["① 순서 A", "② 순서 B", "③ 순서 C", "④ 순서 D"],
+    "stem_raw": "예시단원 A의 첫 순서를 고르시오.",
+    "candidate_images": []
+  },
+  {
+    "idx": 2,
+    "page": 1,
+    "year": "2025",
+    "dept_prof": "예시과 홍길동",
+    "scope": "예시단원 A",
+    "stem": "예시단원 A의 다음 순서를 고르시오.",
+    "options": ["① 순서 A", "② 순서 B", "③ 순서 C", "④ 순서 D"],
+    "stem_raw": "예시단원 A의 다음 순서를 고르시오.",
+    "candidate_images": []
+  },
+  {
+    "idx": 3,
+    "page": 2,
+    "year": "2025",
+    "dept_prof": "예시과 성춘향",
+    "scope": "예시단원 B",
+    "stem": "합성 도판의 예시 표기를 고르시오.",
+    "options": ["① 표기 A", "② 표기 B", "③ 표기 C", "④ 표기 D"],
+    "stem_raw": "합성 도판의 예시 표기를 고르시오.",
+    "candidate_images": ["p02_1.jpg"]
+  },
+  {
+    "idx": 4,
+    "page": 2,
+    "year": "2024",
+    "dept_prof": "예시과 이몽룡",
+    "scope": "",
+    "stem": "분류 없는 예시 표기를 고르시오.",
+    "options": ["① 표기 A", "② 표기 B", "③ 표기 C", "④ 표기 D"],
+    "stem_raw": "분류 없는 예시 표기를 고르시오.",
+    "candidate_images": []
+  }
+]

@@ -12,6 +12,7 @@
   [strict-detail]  imp·오답선지·충실한 new_expl 미달 = 에러                         ← --strict-detail
   [strict-meta]    교수명에 과/교실명 포함 = 에러                                    ← --strict-meta
   [strict-scope]   범위 오배치 의심 = 에러                                          ← --strict-scope
+  [strict-blind]   블라인드 답·qid 누락/형식 오류 = 에러                             ← --strict-blind
   [no-spoiler]     정답 노출 후보(정보)                                            ← --raw 무관, 끄려면 --no-nospoiler
   [coverage]       놓친 distinct 후보(정보)                                        ← --raw 있을 때만
 
@@ -94,10 +95,7 @@ _NEED_SOURCE = {"ANSWER_CORRECTED", "ANSWER_DISPUTED"}
 # `**강조**` 는 별표째 출력되고 학명 이탤릭 `*Klebsiella*` 도 마찬가지다.
 # 오탐 주의: 치식 표기('*'/'**')처럼 별표가 '내용'인 경우가 있다 → 별표 안쪽이 비지 않고
 # 양옆이 단어 경계인 '쌍'만 잡는다(단독 별표·공백 낀 별표는 통과).
-_MD_RE = re.compile(
-    r"\*\*(?=\S)[^*\n]{1,60}(?<=\S)\*\*"          # **강조**
-    r"|(?<![\w*])\*(?=\S)[^*\n]{1,40}(?<=\S)\*(?![\w*])"   # *이탤릭*
-)
+_MD_RE = schema.MD_RE
 # 마크다운을 훑을 텍스트 필드(리치블록 포함). 문자열·리스트·dict 값 모두 본다.
 _PROSE_FIELDS = ("new_expl", "imp", "tip", "related_theory",
                  "wrong_option_explanations", "clinical_summary")
@@ -261,6 +259,52 @@ def gate_scope(SCOPES):
     return out
 
 
+def gate_blind(SCOPES):
+    out = []
+    qids = {}
+    for head, qs in SCOPES:
+        for q in qs:
+            tag = "[%s] %s" % (schema.clean_scope(head), q.get('meta', '?'))
+            qid = q.get(schema.QID_FIELD)
+            if not isinstance(qid, str) or not qid.strip():
+                out.append("%s — blind qid 누락/빈 문자열" % tag)
+            elif qid in qids:
+                out.append("%s — blind qid 중복 '%s' (최초 %s)" % (tag, qid, qids[qid]))
+            else:
+                qids[qid] = tag
+
+            if schema.BLIND_FIELD not in q:
+                out.append("%s — blind 누락" % tag)
+                continue
+            blind = q.get(schema.BLIND_FIELD)
+            if not isinstance(blind, dict):
+                out.append("%s — blind 는 dict여야 함" % tag)
+                continue
+            if not _nonempty(blind.get('verified')):
+                out.append("%s — blind.verified 누락/빈값" % tag)
+            if not _nonempty(blind.get('note')):
+                out.append("%s — blind.note 누락/빈값" % tag)
+            if blind.get('confidence') not in schema.BLIND_CONFIDENCE:
+                out.append("%s — blind.confidence '%s' 허용값 아님(%s)"
+                           % (tag, blind.get('confidence'), ", ".join(schema.BLIND_CONFIDENCE)))
+
+            options = q.get('options')
+            if not isinstance(options, list) or not options:
+                continue
+            verified_markers = schema.norm_markers(blind.get('verified'))
+            markers = set(schema.blind_markers(q)) | set(verified_markers)
+            for marker in sorted(markers):
+                marker_index = _marker_index(marker)
+                if marker_index is not None and marker_index > len(options):
+                    out.append("%s — blind 마커 '%s'(=%d)이 선지 수(%d) 초과"
+                               % (tag, marker, marker_index, len(options)))
+            if 'answers' in blind:
+                answer_markers = schema.norm_markers('', blind.get('answers'))
+                if set(answer_markers) != set(verified_markers):
+                    out.append("%s — blind.answers와 blind.verified 마커 집합 불일치" % tag)
+    return out
+
+
 def section(title, items, kind):
     """kind: 'err'(에러)·'warn'(경고)·'info'(정보)."""
     mark = {'err': '✗', 'warn': '△', 'info': 'ℹ'}[kind]
@@ -281,10 +325,15 @@ def main():
     ap.add_argument('--strict-scope', action='store_true', help='범위 오배치 의심을 에러로')
     ap.add_argument('--strict-qid', action='store_true',
                     help='뷰어 진도 키(scope+meta+stem) 충돌을 에러로 — 신규 과목 권장')
+    ap.add_argument('--strict-blind', action='store_true',
+                    help='블라인드 답(blind 필드)·qid 누락·형식 오류를 에러로 — 3단 분리로 만든 과목 권장')
     ap.add_argument('--no-nospoiler', action='store_true', help='no-spoiler 정보 섹션 건너뜀')
     ap.add_argument('--no-coverage', action='store_true', help='커버리지 정보 섹션 건너뜀')
     args = ap.parse_args()
 
+    if not Path(args.data).is_file():
+        print("validate.py: 데이터 파일을 찾을 수 없습니다: %s" % args.data, file=sys.stderr)
+        sys.exit(1)
     SCOPES = schema.load_scopes(args.data)
     total = sum(len(v) for _, v in SCOPES)
     print("=" * 70)
@@ -323,6 +372,22 @@ def main():
         s = gate_scope(SCOPES)
         section("strict-scope: 범위 오배치 의심", s, 'err')
         errors += s
+
+    if args.strict_blind:
+        b = gate_blind(SCOPES)
+        section("strict-blind: 블라인드 답 누락/형식", b, 'err')
+        errors += b
+    else:
+        blind_missing = sum(
+            1 for _head, questions in SCOPES for question in questions
+            if schema.BLIND_FIELD not in question
+        )
+        if blind_missing:
+            blind_summary = "블라인드 답(blind) 없는 문항 %d/%d — --strict-blind 로 에러화" \
+                            % (blind_missing, total)
+            warns.append(blind_summary)
+            if len(warns) > 60:
+                section("블라인드 답 요약(종료코드 무관)", [blind_summary], 'warn')
 
     if warns:
         section("경고(종료코드 무관)", warns, 'warn')

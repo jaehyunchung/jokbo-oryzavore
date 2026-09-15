@@ -151,48 +151,63 @@ python3 main.py --pdf "<족보.pdf>" --subject "<과목명>" --auto-format --ext
 ### 역할 격리 (블라인드의 근거)
 
 블라인드는 분절기가 regex 냐 LLM 이냐로 정해지는 게 아니라, **정답을 본 역할의 출력을 Solver 가
-소비하느냐**로 정해집니다. 세 역할을 분리하세요:
+소비하느냐**로 정해집니다. 역할을 다음과 같이 분리하세요:
 
 | 역할 | 누가 | 무엇을 보나 |
 |---|---|---|
 | **Segmenter** | 기본은 코드(`extract.py`). 막히면 **별도 서브에이전트** | `lines.json`(답 포함). **포인터맵만** 내보냄 |
-| **Solver** | **새 서브에이전트** (Segmenter 와 분리) | `all_questions.json`(블라인드)만. 원본 PDF·`lines.json`·`answer_key.json`·Segmenter 대화 접근 금지 |
-| **Comparer** | 메인 에이전트(나) | Solver 가 답을 낸 **뒤에만** `answer_key.json` 을 염 |
+| **Solver(A)** | **새 서브에이전트** (Segmenter 와 분리) | `slices/<슬라이스>.json` 블라인드 구조층만 |
+| **Adjudicator(B)** | 메인 에이전트 또는 별도 에이전트 | `_reconcile/worklist/<batch>.json`의 A 답과 원본 답·해설 |
+| **Explainer(C)** | 새 서브에이전트 또는 메인 | `_reconcile/resolved/<batch>.json`의 확정 답·원본 해설 전부. 정답 필드는 쓸 수 없다(`check`가 거부) |
+| **Adversary(D)** | **새 세션** | 완성본과 `_reconcile/objections.json`. 데이터 수정 금지 |
 
-### 3단계 — 블라인드 재검증 ★
+### 3단계 — 블라인드 3단 분리 재검증 ★
 
-**이 도구의 존재 이유입니다. 아래 순서를 반드시 지키세요.**
+**이 도구의 존재 이유입니다. 풀이(A), 판정(B), 해설(C)을 파일과 게이트로 나눕니다.** 아래 순서를
+반드시 지키세요. `WORK="output/<과목>_work"`를 작업 폴더로 씁니다.
 
-1. **`all_questions.json` 만 열고 문제를 푼다.**
-   **`answer_key.json` 을 먼저 열지 마세요.** 원본 답을 보고 나면 거기에 끌려가서(앵커링)
-   재검증이 아니라 원본 답 추인이 됩니다. 그러면 이 도구를 쓸 이유가 없어집니다.
-2. 다 풀고 **그때** `answer_key.json` 을 열어 대조하고, 문항마다 판정합니다:
+```bash
+# 추출 결과를 구조층과 봉인층으로 분리
+python3 jokbo_pipeline/blindwork.py split --extract "output/<과목>_work" --work "output/<과목>_work"
+# 도판이 있는 족보는 §6.1 도판 패스 뒤, slice 전에 같은 입력 인자를 반복해 다시 분리
+python3 jokbo_pipeline/blindwork.py split --extract "output/<과목>_work" --work "output/<과목>_work" --force --image-map <map.json>
+python3 jokbo_pipeline/blindwork.py slice --work "output/<과목>_work"
 
-   | 판정 | 언제 |
-   |---|---|
-   | `ANSWER_MATCH` | 내 답과 원본 답이 같음 |
-   | `ANSWER_CORRECTED` | 원본 답이 틀렸다고 판단 — **근거를 해설에 명시** |
-   | `ANSWER_DISPUTED` | 판단 불가·논쟁적·다른 선지도 참일 수 있음 |
+# A: 슬라이스마다 새 서브에이전트에 jokbo_pipeline/BRIEF_solve.md와 해당 slices/*.json만 전달
+python3 jokbo_pipeline/blindwork.py check --work "output/<과목>_work" --stage solve "output/<과목>_work/solved/<슬라이스>.py"
+python3 jokbo_pipeline/blindwork.py scan --work "output/<과목>_work"
 
-   플래그 이름은 `jokbo_pipeline/schema.py` 의 `FLAG_TAXONOMY` 가 유일한 진실이다.
-   이름을 틀리면 `validate.py` 가 '알 수 없는 flag' **경고**만 내고 통과시키므로(에러 아님)
-   조용히 배지가 안 붙는다. 위 세 개는 **answer_group** 이라 **동시에 둘 이상 쓸 수 없다.**
+# B: worklist마다 jokbo_pipeline/BRIEF_adjudicate.md로 판정한 뒤 확정층 생성
+python3 jokbo_pipeline/blindwork.py check --work "output/<과목>_work" --stage adjudicate "output/<과목>_work/_reconcile/adjudicated/<batch>.py"
+python3 jokbo_pipeline/blindwork.py resolve --work "output/<과목>_work"
 
-   ⚠ 정답 번호를 바꾸기 전에 **6.2 를 먼저 읽을 것** — 의학적으로 틀려 보여도 답을
-   바꾸면 안 되는 경우가 있다.
+# C: 배치마다 jokbo_pipeline/BRIEF_explain.md로 해설을 쓴 뒤 조립
+python3 jokbo_pipeline/blindwork.py check --work "output/<과목>_work" --stage explain "output/<과목>_work/_reconcile/explained/<batch>.py"
+python3 jokbo_pipeline/blindwork.py build --work "output/<과목>_work" --out-data "output/<과목>_work/questions_data.py"
+```
 
-3. 결과를 `output/<과목>_work/questions_data.py` 로 작성합니다.
-   - 스키마 틀: **`jokbo_pipeline/questions_data_template.py`** 를 복사해 채웁니다.
-   - 필드 정의·규약 전체: **`jokbo_pipeline/README.md`** (필수/선택 필드, 복수정답 `answers`,
-     R형, 다중 이미지 `images[]`, `【왕족】` 태그, 리치블록 5종, 범위 헤더 꼬리 규약).
-4. **정답을 문두(stem)나 캡션에 흘리지 마세요.** 문제를 풀 수 없게 됩니다.
-5. 문항이 많으면 **나눠서 진행하고 중간에 저장**하세요. `output/<과목>_work/` 에 남으므로
-   다음 세션에서 이어서 할 수 있습니다.
+판정은 다음 네 가지입니다. **정답 필드를 쓰는 역할은 B뿐입니다.**
+
+| 판정 | 언제 |
+|---|---|
+| `ANSWER_MATCH` | 독립 답과 원본 답이 같음 |
+| `ANSWER_CORRECTED` | 원본 답이 틀렸다고 판단. `source`에 근거를 명시 |
+| `ANSWER_DISPUTED` | 판단 불가·논쟁적·다른 선지도 참일 수 있음 |
+| `TEXT_RECONSTRUCTED` | 원본에 정답 기록이 없어 독립 답으로 복원 |
+
+플래그 이름은 `jokbo_pipeline/schema.py`의 `FLAG_TAXONOMY`가 유일한 진실입니다. 정답 번호를
+바꾸기 전에 **6.3을 먼저 읽으세요.** 의학적으로 틀려 보여도 출제의도에 맞는 답이면 유지해야 합니다.
+
+- 필드 정의와 스키마 틀의 정본은 **`jokbo_pipeline/README.md`**와
+  **`jokbo_pipeline/questions_data_template.py`**입니다.
+- **정답을 문두(stem)나 캡션에 흘리지 마세요.** 문제를 풀 수 없게 됩니다.
+- 문항이 많으면 **나눠서 진행하고 중간에 저장**하세요. 작업 폴더에 단계별 산출물이 남아 다음
+  세션에서 이어서 할 수 있습니다.
 
 ### 4단계 — 검증
 
 ```bash
-python3 jokbo_pipeline/validate.py --data "output/<과목>_work/questions_data.py"
+python3 jokbo_pipeline/validate.py --data "output/<과목>_work/questions_data.py" --strict-blind
 ```
 
 스키마 필수필드 + 정답노출(no-spoiler) + 커버리지를 한 번에 검사합니다. 에러가 있으면 exit 1.
@@ -201,7 +216,26 @@ python3 jokbo_pipeline/validate.py --data "output/<과목>_work/questions_data.p
 ```bash
 python3 jokbo_pipeline/validate.py --data "<...>/questions_data.py" \
   --raw "output/<과목>_work/all_questions.json" \
-  --strict-detail --strict-meta --strict-scope
+  --strict-detail --strict-meta --strict-scope --strict-blind
+```
+
+검증 뒤 블라인드 답과 최종 답의 관계를 감사합니다.
+
+```bash
+python3 jokbo_pipeline/blindwork.py audit --work "output/<과목>_work"
+```
+
+그다음 **새 세션**의 D에게 `jokbo_pipeline/BRIEF_adversarial.md`를 주어 완성본과 objections를 적대 재검증하게
+합니다. D는 보고서만 씁니다. 보고서를 읽은 E 반영자(집필 세션 또는 이어받은 세션)가
+`_reconcile/adversarial/<batch>.py`에 정정 패치와 각 `objection_disposition`을 기록합니다.
+
+```bash
+python3 jokbo_pipeline/blindwork.py build --work "output/<과목>_work" --layers adversarial \
+  --require-dispositions --out-data "output/<과목>_work/questions_data.py"
+python3 jokbo_pipeline/validate.py --data "output/<과목>_work/questions_data.py" \
+  --raw "output/<과목>_work/all_questions.json" \
+  --strict-detail --strict-meta --strict-scope --strict-blind
+python3 jokbo_pipeline/blindwork.py audit --work "output/<과목>_work"
 ```
 
 ### 5단계 — 빌드
@@ -251,6 +285,7 @@ main.py                  오케스트레이터 (설치 → 추출 → 체크포�
 jokbo_pipeline/
   schema.py              ★스키마 단일 정의 — build.py·build_viewer.py·validate.py 가 import (복붙 금지)
   extract.py             PDF 구조 추출 (블라인드/정답키 분리)
+  blindwork.py           ★ 블라인드 3단 분리 CLI (split·slice·check·scan·resolve·build·audit)
   build.py               DOCX 빌더
   validate.py            통합 검증 게이트
   nospoiler_audit.py     정답 노출 감사
@@ -262,6 +297,8 @@ jokbo_pipeline/
   parse_warnings.py      추출 경고 taxonomy·blocker 단일 진실
   questions_data_template.py   문항 스키마 템플릿
   README.md              ★파이프라인 상세 문서
+  BRIEF_solve.md · BRIEF_adjudicate.md · BRIEF_explain.md · BRIEF_adversarial.md
+                         ★ 단계별 역할 브리프
 kd_library/
   build_viewer.py        단일 HTML 뷰어 빌더
   viewer_template.html   뷰어 템플릿 (JS 로직 포함)
@@ -281,6 +318,8 @@ python3 jokbo_pipeline/tests/test_extract.py
 python3 jokbo_pipeline/tests/test_extract_improvements.py
 python3 jokbo_pipeline/tests/test_validate_integrity.py
 python3 jokbo_pipeline/tests/test_llm_segment.py
+python3 jokbo_pipeline/tests/test_blindwork.py
+python3 jokbo_pipeline/tests/test_validate_blind_cli.py
 python3 kd_library/tests/test_build_viewer.py
 ```
 
@@ -416,8 +455,17 @@ pdftoppm -png -r 110 -f <N> -l <N> -singlefile "<족보.pdf>" <출력이름>
 이 자료의 목적은 시험을 잘 보는 것입니다. 재출제되면 **답안지가 인정할 번호가 정답**입니다.
 국제 표준이 강의와 다르다는 이유로 번호를 바꾸면 오히려 틀립니다.
 
-출제의도의 근거로 쓸 것: 족보 복원자의 진술("2번이 확실히 맞았습니다"), 같은 강의의 다른 연도
-문항에서 확인되는 용어 용법, 강의록·PPT 인용.
+출제의도의 근거는 권위에 따라 나눠 봅니다.
+
+| 등급 | 근거 |
+|---|---|
+| **강함** | 공식 답안지·원본 시험지, 같은 강의의 다른 연도가 독립적으로 같은 답, 강의자료가 그 답을 직접 뒷받침 |
+| **약함** | 복원자 진술 1건. 기억이지 답안지가 아니다. 한 해에만 나오는 숫자 |
+| **없음** | 근거 없이 숫자만 적혀 있음 |
+
+족보에 적힌 답은 **선배가 적은 답**이다. 공식 답안지가 아닌 한 그 자체가 틀렸을 수 있다.
+출제의도 우선 규칙은 **의도의 증거가 있을 때** 적용하는 것이지, 페이지에 적힌 아무 숫자에나
+기본으로 양보하라는 뜻이 아니다.
 
 **해설 서술 형식을 통일하세요:**
 
@@ -426,8 +474,9 @@ pdftoppm -png -r 110 -f <N> -l <N> -singlefile "<족보.pdf>" <출력이름>
 
 - **기관 규정을 보편 기준처럼 쓰지 마세요.** 사건등급 체계, 보고 기한, 낙상 위험 연령 경계,
   약물 사용 권한 같은 것은 병원마다 다릅니다 — "이 병원·이 강의 기준"이라고 못 박으세요.
-- 다른 선지도 참일 수 있으면 그 이유를 본문에 적고 `ANSWER_DISPUTED` 로 바꿉니다
-  (DOCX·뷰어의 FLAGS 줄에 표시됩니다).
+- 다른 선지도 참일 수 있으면 그 이유를 본문에 적고 `ANSWER_DISPUTED`로 바꿉니다.
+  **뷰어는 `flags`·`scope_note`를 렌더하지 않으므로** 학습자 고지는 반드시 `new_expl` 본문의
+  `⚠` 문단으로 씁니다(DOCX만 FLAGS 줄을 표시).
 - 해설에서 고쳐야 할 전형: 낡은 수치, 절대명제("~는 그 자체로 ~이다", "예방 대책이 없다"),
   기한 오독(분석·계획 제출 기한을 개선활동 완료 기한으로 읽는 것).
 
@@ -471,6 +520,7 @@ pdftoppm -png -r 110 -f <N> -l <N> -singlefile "<족보.pdf>" <출력이름>
    ⚠ 파이썬 `ast` 로 편집한다면 `col_offset` 은 **UTF-8 바이트 오프셋**입니다. 한글 파일에서
    문자 인덱스로 계산하면 어긋납니다.
 - 범위 **제목** 문자열 변경은 qid 파괴(뷰어 진도·🚩 체크가 stem 기반 qid 로 저장되므로) — 꼬리(`· [2026 담당교수: …]`)만 바꾸는 것은 안전하다.
+- 블라인드 3단 분리로 만든 과목은 `validate.py --strict-blind`를 켜서 `blind` 필드 누락을 막습니다(6.6).
 
 ### 6.5 2단 조판 족보
 
@@ -483,3 +533,40 @@ pdftotext -layout -f <N> -l <N> -x 300 -y 0 -W 295 -H 841 "<pdf>" right.txt
 ```
 
 이 저장소의 공용 도구 python3 jokbo_pipeline/extract_cols.py --pdf "<pdf>" --out-dir <폴더> 가 같은 일을 한 번에 한다.
+
+### 6.6 블라인드는 문서가 아니라 파일 분리가 지킨다
+
+한 번은 같은 세션이 문항과 정답을 나눈 뒤 그대로 집필했습니다. 블라인드 준수는 자기 신고에
+그쳤고, 독립 풀이 산출물이 없어 나중에 감사할 수도 없었습니다. 반대로 집필 전체를 블라인드로
+묶었을 때는 답은 독립적으로 골랐지만 원본 해설에 담긴 출제의도를 잃어 시험에 둔한 해설이 됐습니다.
+
+그래서 다음 세 단계로 나눕니다.
+
+| 단계 | 입력 | 산출 | 기계 강제 |
+|---|---|---|---|
+| A 풀이 | `slices/*.json`과 연결 도판 | `solved/*.py`의 독립 답·선지별 판단 | `blindwork.py check --stage solve` |
+| B 판정 | `worklist/*.json`의 A 답·원본 답·원본 해설 | `adjudicated/*.py`의 확정 답·판정 | `blindwork.py check --stage adjudicate`, `resolve` |
+| C 집필 | `resolved/*.json`의 확정 답·원본 해설 전부 | `explained/*.py`의 새 해설 | `blindwork.py check --stage explain` |
+
+C는 정답 필드를 쓸 수 없습니다. 확정 답에 이의가 있으면 `objection`에 쓰고, `blindwork.py build`가
+`_reconcile/objections.json`으로 분리합니다. E 반영자가 D의 보고서를 읽고 오버라이드 레이어에
+`objection_disposition`을 기록하며, 최종 `blindwork.py build --require-dispositions`는 미판정 이의를
+거부합니다.
+
+블라인드 답은 최종 데이터의 `blind` 필드에 남습니다. `blindwork.py audit`로 원본 답과의 자동
+일치율, 최종 답까지의 생존율, 최종 답과 원본 답의 일치율을 다시 잽니다. 적대 재검증 D는 저장 답과
+원본 답이 다른 문항을 전수 검사하고, `objections.json`의 각 이의를 C의 사유에 끌리지 않게 독립
+판정해야 합니다. 절차와 역할별 입력은 `jokbo_pipeline/BRIEF_solve.md`, `jokbo_pipeline/BRIEF_adjudicate.md`, `jokbo_pipeline/BRIEF_explain.md`,
+`jokbo_pipeline/BRIEF_adversarial.md`가 정본입니다.
+
+도구가 보장하는 범위는 단계마다 다릅니다. A 풀이 입력에는 `meta`, `options`, `qid`, `scope`,
+`stem`, `years`만 있고 정답은 없습니다. B 판정은 모든 `blind_*` 필드와 `orig_ans`, `orig_expl`,
+`recon`, `why`를 받고, C 집필은 확정된 `verified`, `answers`, `flags`, `source`, 원본 답·해설,
+`blind` 기록과 구조층 전부를 받습니다. D 적대 재검증은 모든 정답·해설 필드가 든 완성 데이터를
+받습니다. 각 단계 산출물은 필수 키·개수·정합을 검사하고, 정답 필드 작성은 B와 오버라이드
+레이어 밖에서 거부합니다. A의 독립 답은 `blind`에 남아 나중에 다시 측정할 수 있습니다.
+
+따라서 블라인드는 A에서 소진되고 기록으로 보존될 뿐, 뒤 단계에 다시 부과되지 않습니다. 뒤 단계는
+시험에 쓸 만한 해설을 만들기 위해 원본 해설을 의도적으로 받습니다. 에이전트가 워크스페이스의 다른
+파일을 실제로 열지 않았는지는 증명하지 않는다(OS 격리 없음). 위협 모델은 '정직하지만 실수할 수
+있는 에이전트'입니다.

@@ -1,0 +1,57 @@
+{
+  "scan": {
+    "total": 8,
+    "unsolved": 0,
+    "adjudicated": 0,
+    "auto_match": 3,
+    "none_recorded": 1,
+    "mismatch": 1,
+    "ambiguous": 1,
+    "unparsed": 1,
+    "subjective": 1,
+    "pending": 4,
+    "pending_qids": [
+      "u01_예시단위#002",
+      "u01_예시단위#004",
+      "u01_예시단위#006",
+      "u01_예시단위#007"
+    ],
+    "unsolved_qids": []
+  },
+  "audit": {
+    "measurable": true,
+    "total": 8,
+    "objective": 7,
+    "subjective": 1,
+    "blind_missing": 0,
+    "orig_ok": 4,
+    "orig_none_recorded": 1,
+    "orig_unparsed_or_ambiguous": 2,
+    "auto_match": {
+      "num": 3,
+      "den": 4
+    },
+    "blind_survival": {
+      "num": 6,
+      "den": 7
+    },
+    "final_vs_orig": {
+      "num": 4,
+      "den": 4
+    },
+    "mismatches": [
+      {
+        "qid": "u01_예시단위#004",
+        "meta": "2024 · 이몽룡",
+        "blind": ["②"],
+        "final": ["⑤"],
+        "orig": ["⑤"]
+      }
+    ],
+    "open_objections": null
+  },
+  "slices": {
+    "u01_예시단위__t01": 7,
+    "u01_예시단위__i01": 1
+  }
+}

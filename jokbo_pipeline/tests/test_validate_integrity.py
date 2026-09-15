@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 PIPE = HERE.parent
 sys.path.insert(0, str(PIPE))
 
-from validate import integrity_check, _marker_index  # noqa: E402
+from validate import gate_blind, integrity_check, _marker_index  # noqa: E402
 
 PASS = [0]
 FAIL = [0]
@@ -45,6 +45,19 @@ _BASE = {"meta": "2023 · 홍길동", "stem": "문항?", "verified": "②",
 
 def good(**kw):
     q = dict(_BASE); q.update(kw); return q
+
+
+def _blind_errors(*questions):
+    return gate_blind([("범위", list(questions))])
+
+
+def blind_good(**kw):
+    q = good(
+        qid="q-001",
+        blind={"verified": "①", "note": "독립 풀이", "confidence": "high"},
+    )
+    q.update(kw)
+    return q
 
 
 # _marker_index
@@ -154,6 +167,49 @@ ok("마크다운" not in _warns(good(new_expl=["치식 6* 와 ** 는 내용이�
    "치식 표기의 단독 별표는 오탐 아님")
 ok("마크다운" not in _warns(good(new_expl=["곱셈 2 * 3 * 4"])),
    "공백 낀 별표는 오탐 아님")
+
+ok(_blind_errors(blind_good()) == [],
+   "정상 blind+qid 는 통과하며 blind와 최종 verified를 비교하지 않음")
+
+ok(len(_blind_errors(good(qid="q-001"))) == 1,
+   "blind 누락은 1건")
+
+ok(len(_blind_errors(blind_good(qid=""))) == 1,
+   "qid 누락/빈 문자열은 1건")
+duplicate_qid = _blind_errors(
+    blind_good(qid="same-qid"),
+    blind_good(qid="same-qid", meta="2022 · 김철수", stem="다른 문항?"),
+)
+ok(any("qid 중복" in error for error in duplicate_qid),
+   "전체 SCOPES에서 qid가 중복되면 1건 이상")
+
+ok(any("verified" in error for error in _blind_errors(
+    blind_good(blind={"verified": "", "note": "독립 풀이", "confidence": "high"})
+)), "blind.verified 빈 문자열은 에러")
+
+ok(any("note" in error for error in _blind_errors(
+    blind_good(blind={"verified": "①", "note": "", "confidence": "high"})
+)), "blind.note 빈 문자열은 에러")
+
+ok(any("confidence" in error for error in _blind_errors(
+    blind_good(blind={"verified": "①", "note": "독립 풀이", "confidence": "sure"})
+)), "blind.confidence가 BLIND_CONFIDENCE 밖이면 에러")
+
+ok(any("선지 수" in error for error in _blind_errors(
+    blind_good(blind={"verified": "⑥", "note": "독립 풀이", "confidence": "low"})
+)), "5선지 객관식의 blind ⑥은 범위 초과 에러")
+
+ok(any("answers" in error and "verified" in error for error in _blind_errors(
+    blind_good(blind={
+        "verified": "②", "answers": ["①"],
+        "note": "독립 풀이", "confidence": "medium",
+    })
+)), "blind.answers와 blind.verified 마커 집합 불일치는 에러")
+
+ok(_blind_errors(blind_good(
+    options=[],
+    blind={"verified": "서술 답", "note": "독립 풀이", "confidence": "high"},
+)) == [], "주관식은 마커 검사를 하지 않음")
 
 print(f"\n[test_validate_integrity] {PASS[0]} passed, {FAIL[0]} failed")
 sys.exit(1 if FAIL[0] else 0)

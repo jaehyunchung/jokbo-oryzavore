@@ -22,6 +22,7 @@
 | **`schema.py`** | **스키마 단일 정의.** 필드 목록(`KEEP`)·범위 헤더 파싱(`clean_scope`/`scope_prof`)·교수명 정규화(`split_prof`/`meta_nameonly`)·왕족 태그(`is_royal`/`strip_royal`)·정답 개수(`n_correct`)·`load_scopes`·`FLAG_TAXONOMY`/`REQUIRED`·2026 범위 상태(`scope_tokens`/`scope_status`/`SCOPE_WEIGHT`) |
 | **`validate.py`** | **빌드 전 통합 검증 게이트.** 필수필드 + 무결성 + strict 3종 + no-spoiler·커버리지 감사를 한 번에. 에러 있으면 exit 1 (빌드는 안 함) |
 | `extract.py` | PDF 구조 추출(헤더·범위라벨·문항·도판). 족보 형식에 따라 헤더 정규식·정답 패턴 조정이 필요할 수 있다 |
+| **`blindwork.py`** | **블라인드 3단 분리 CLI.** `split`·`slice`·`check`·`scan`·`resolve`·`build`·`audit` (3.1·3.4) |
 | `build.py` | DOCX 빌더. 과목 무관, 경로만 인자로 받는다 |
 | `parse_warnings.py` | **추출 경고 taxonomy·blocker 단일 정의.** `extract.py` 가 만들고 `main.py` 가 `counts.json` 으로 읽어 체크포인트를 막는다 |
 | `format_probe.py` · `format_lab.py` | Phase1 결정론 포맷 추론 (`--auto-format`) |
@@ -58,6 +59,8 @@ SCOPES = [
 | `years` | ● | 실제 출제연도 배열. '출제 N회' 배지의 근거 |
 | `stem` `options` `verified` | ● | 문제·선지·검증된 정답 |
 | `new_expl` | ● | 새 해설. 문자열 또는 불릿 배열 |
+| `qid` | | `blindwork build` 가 기록하는 비렌더 문항 ID(`<batch>#NNN`). 뷰어·DOCX 미표시 |
+| `blind` | | 블라인드 답 `{verified, answers?, confidence, note}`. A 단계 산출을 `build` 가 기록하며 뷰어·DOCX에는 표시하지 않는다. `--strict-blind`·`audit` 가 읽는다 |
 | `answers` | | **복수정답일 때만** |
 | `source` | | 출처 → Reference 블록 |
 | `orig_ans` `orig_expl` | | 원본 답·해설 |
@@ -123,14 +126,20 @@ SCOPES = [
 
 ## 3. Authoring 규칙
 
-### 3.1 ★ 블라인드 재검증 — 원본 답을 처음부터 보지 않는다
+### 3.1 ★ 블라인드 3단 분리 — 정답은 못 보고, 해설은 다 보고 쓴다
 
-원본(특히 복원 과정의 오답·오해설)을 먼저 보면 거기에 앵커링되어 검증이 추인이 된다. 순서를 고정한다.
+원본 답을 먼저 보면 거기에 앵커링되어 재검증이 추인으로 흐르기 쉽다. 그러나 "먼저 보지 않는다"고 문서에 적는 것만으로는 순서를 강제할 수 없다. 입력 파일을 분리하고, 단계별 허용 키와 정합을 게이트로 검사하고, 독립 답을 최종 데이터에 남겨야 나중에도 확인할 수 있다.
 
-1. **문제(stem + 선지)만 보고** 답과 해설을 **독립적으로 확정**한다. 이 단계에서 `orig_ans`·`orig_expl` 을 **보지 않는다.**
-2. 확정한 뒤에 원본과 **대조**한다.
-3. **불일치할 때만**, 그리고 **원본이 강의록 기반일 때에 한해** 원본을 참고해 재고·수정한다. 원본이 복원자 추정이거나 출처 불명이면 무시하고 내 확정을 유지한다.
-4. 결과를 `flags` 에 남긴다 — `ANSWER_MATCH` / `ANSWER_CORRECTED`(근거를 `source` 에) / `ANSWER_DISPUTED`.
+| 단계 | 보이는 것 | 산출 | 기계 강제 |
+|---|---|---|---|
+| A 풀이 | 자기 `slices/*.json`과 연결 도판 | `solved/*.py`의 독립 답·선지별 판단 | 구조층 누출 검사, qid·개수·순서·허용 키 검사 |
+| B 판정 | `worklist/*.json`의 A 답·원본 답·원본 해설 | `adjudicated/*.py`의 확정 답·판정 | answer flag 조합, 원본 대비 정합, 근거 필수 조건 검사 |
+| C 집필 | `resolved/*.json`의 확정 답·원본 해설 전부 | `explained/*.py`의 새 해설 | 해설 필수 필드·오답선지 수·허용 키 검사, 정답 필드 금지 |
+
+1. **A는 답, 선지별 참·거짓 판정, 그 근거만 쓴다.** 새 해설과 원본 대조는 뒤 단계로 넘긴다.
+2. **정답 필드는 B만 쓴다.** 재출제 때 답안지가 인정할 출제의도를 우선하되, 먼저 원본 답의 권위를 매긴다. 족보 답은 선배의 복원 기록이므로 공식 답안이 아니면 그 자체가 틀릴 수 있다.
+3. **C는 새 해설, 핵심 한 줄, 오답선지 해설을 모두 쓴다.** 원본 해설을 읽어도 되지만, 열람 허용은 사실로 채택해도 된다는 뜻이 아니다. 의학적 주장은 따로 검증하고 확정 답에 이의가 있으면 정답 필드 대신 `objection`에 쓴다.
+4. **A의 답은 최종 문항의 `blind` 필드에 남는다.** `audit`로 원본 답과의 자동일치율, 최종 답까지의 생존율, 최종 답과 원본 답의 일치율을 언제든 다시 잰다.
 
 원본은 늘 `orig_ans`/`orig_expl` 로 **분리 보존**한다. 합치지 않는다.
 
@@ -156,6 +165,83 @@ SCOPES = [
 정렬 **범위 > 연도 > 교수** · 깨진 텍스트는 추정 재구성 · 도판은 A(stem)/B(해설) 구분해 **A만** 삽입 ·
 누락은 텍스트 `[이미지 누락]`(이모지 금지) · 사용자 검수 승인으로 완료.
 
+### 3.4 `blindwork.py` 명령 요약
+
+아래 사용법은 각 하위 명령의 `--help`와 같은 옵션 이름을 쓴다. 모든 명령은 `-h` 또는 `--help`로 도움말을 볼 수 있다.
+
+```text
+blindwork.py split [-h] (--batches BATCHES | --extract EXTRACT) --work WORK [--allow-leak QID=사유] [--image-map IMAGE_MAP] [--force]
+blindwork.py slice [-h] --work WORK [--text-size TEXT_SIZE] [--image-size IMAGE_SIZE] [--force]
+blindwork.py check [-h] --work WORK --stage {solve,adjudicate,explain} [--patch] file
+blindwork.py scan [-h] --work WORK [--batch BATCH] [--all] [--json]
+blindwork.py resolve [-h] --work WORK [--batch BATCH]
+blindwork.py build [-h] --work WORK (--out-batches OUT_BATCHES | --out-data OUT_DATA) [--batch BATCH] [--layers LAYERS] [--require-dispositions]
+blindwork.py audit [-h] (--data DATA | --work WORK) [--show SHOW] [--json]
+```
+
+`_reconcile/` 아래의 이름별 오버라이드 레이어는 `build`가 직접 검사하며, 이를 위한 `check` 단계는 없다.
+
+`split`을 다시 실행할 때는 처음 사용한 `--batches` 또는 `--extract`와 다른 입력 옵션을 모두 그대로 반복한 뒤 `--force`를 붙인다. `--force`는 `slices/`·`solved/`·`_reconcile/`에 하류 산출물이 생기기 전까지만 작동한다. `slice --force`도 `solved/`에 풀이가 생긴 뒤에는 거부된다.
+
+**작업 폴더 핵심 레이아웃**
+
+```text
+W/batches_src/<batch>.py                 전사 입력. split --batches가 읽는다
+W/blind/<batch>.json                     A에게 줄 구조층
+W/sealed/sealed_key.json                 원본 답·해설 봉인층
+W/_audit/prior_snapshot.json             재작업 전 판단층이 있을 때만 생성
+W/slices/<batch>__tNN.json, __iNN.json   A 풀이 단위
+W/solved/<slice>.py                      A의 SOLVED 산출
+W/solved/_patch/<slice>.py               A 산출 패치
+W/_reconcile/worklist/<batch>.json       B 입력
+W/_reconcile/adjudicated/<batch>.py      B의 ADJUDICATED 산출
+W/_reconcile/resolved/<batch>.json       C 입력
+W/_reconcile/explained/<batch>.py        C의 EXPLAINED 산출
+W/_reconcile/adversarial/<batch>.py      적대 재검증 보고서 반영 패치
+W/_reconcile/objections.json             C의 이의와 판정 상태
+W/batches/<batch>.py                     build --out-batches 조립 출력
+W/questions_data.py                      build --out-data 조립 출력
+```
+
+`batches_src/`는 답·해설을 `orig_ans`·`orig_expl`로 담은 전사 입력이고, `batches/`는 모든 단계를 합친 조립 출력이다. 두 폴더를 바꾸어 쓰거나 조립본을 직접 고치지 않는다. `blind/`에는 manifest, 이미지 후보, 누출 허용 기록이 함께 생길 수 있다.
+
+**A 산출 `SOLVED`**
+
+| 구분 | 키 |
+|---|---|
+| 허용 | `qid`, `verified`, `answers`, `confidence`, `blind_note`, `option_judgments`, `dispute_note` |
+| 필수 | `qid`, `verified`, `confidence`, `blind_note`, `option_judgments` |
+
+객관식의 `option_judgments`는 선지마다 해당 마커로 시작하고 `참` 또는 `거짓`과 근거를 담는다. 복수정답일 때만 `answers`를 쓰며 `verified`의 마커 집합과 같아야 한다. `confidence`는 `high`·`medium`·`low` 중 하나다.
+
+**B 산출 `ADJUDICATED`**
+
+| 구분 | 키 |
+|---|---|
+| 허용 | `qid`, `flags`, `verified`, `answers`, `source`, `scope_note` |
+| 필수 | `qid`, `flags` |
+
+`ANSWER_MATCH`·`ANSWER_CORRECTED`·`ANSWER_DISPUTED` 중 정확히 하나를 쓰거나, 원본 답이 없을 때 `TEXT_RECONSTRUCTED` 규칙을 따른다. 정정과 논쟁에는 `source`가 필요하고, 논쟁에는 `scope_note`도 필요하다. 확정 답이 A와 같다면 `verified`와 `answers`를 생략할 수 있다.
+
+**C 산출 `EXPLAINED`**
+
+| 구분 | 키 |
+|---|---|
+| 허용 | `qid`, `new_expl`, `imp`, `wrong_option_explanations`, `tip`, `source`, `objection` |
+| 필수 | `qid`, `new_expl`, `imp`, `wrong_option_explanations` |
+
+C는 `verified`·`answers`·`flags`를 비롯한 정답·판정 키를 쓸 수 없다. 확정 답이 잘못됐다고 보면 `objection`에 사유를 남긴다. 객관식 오답 해설은 정답이 아닌 선지마다 정확히 하나, 주관식은 마커 없이 정직한 한 줄을 쓴다.
+
+**오버라이드 레이어와 이의 판정**
+
+`build --layers`는 기본적으로 `adversarial` 레이어를 읽으며 쉼표로 여러 레이어를 지정할 수 있다. 앞 레이어부터 적용하고 뒤 레이어가 같은 키를 덮어쓴다. 레이어의 허용 키는 `qid`, `verified`, `answers`, `flags`, `source`, `scope_note`, `new_expl`, `imp`, `wrong_option_explanations`, `tip`, `objection_disposition`뿐이다. qid·`blind`·구조층·봉인층은 덮어쓸 수 없다.
+
+`objection_disposition`은 `{"verdict": "accepted"|"rejected", "note": "비어 있지 않은 사유"}` 형식이며 최종 문항에는 들어가지 않고 `objections.json`에 레이어 이름과 함께 기록된다. 정답을 바꾸는 레이어는 그 답에 맞는 flags·`source`·`scope_note`·오답선지 해설을 같은 항목에서 함께 고쳐야 재검사를 통과한다. 첫 빌드는 `--require-dispositions` 없이 실행한다. 적대 재검증 보고서를 반영한 최종 빌드는 이 옵션을 붙여 미판정 이의가 하나라도 있으면 거부한다.
+
+`audit`는 ① 블라인드 답과 파싱 가능한 원본 답의 자동일치율, ② 블라인드 답이 최종 답까지 유지된 생존율, ③ 최종 답과 파싱 가능한 원본 답의 일치율을 각각 분자와 분모로 낸다. `blind`가 한 건도 없으면 측정 불가를 알리고 정상 종료한다.
+
+종료코드는 0이 정상, 1이 데이터 또는 검증 실패이며 이때 파일을 쓰지 않는다. 2는 `argparse` 사용법 오류다. 단계별 역할과 입력 제한, 출력 예시는 같은 폴더의 [`BRIEF_solve.md`](BRIEF_solve.md), [`BRIEF_adjudicate.md`](BRIEF_adjudicate.md), [`BRIEF_explain.md`](BRIEF_explain.md), [`BRIEF_adversarial.md`](BRIEF_adversarial.md)에 있다.
+
 ---
 
 ## 4. 검증 — `validate.py`
@@ -164,7 +250,7 @@ SCOPES = [
 
 ```bash
 python3 validate.py --data "$WORK/questions_data.py" --raw "$WORK/all_questions.json" \
-  --strict-detail --strict-meta --strict-scope
+  --strict-detail --strict-meta --strict-scope --strict-blind
 ```
 
 ### 4.1 항상 실행
@@ -182,8 +268,9 @@ python3 validate.py --data "$WORK/questions_data.py" --raw "$WORK/all_questions.
 | `--strict-meta` | `meta` 교수란에 과/교실명이 붙어 있음 |
 | `--strict-scope` | 범위 오배치 의심 (아래 4.4) |
 | `--strict-qid` | **뷰어 진도 키 충돌** (아래 4.5) |
+| `--strict-blind` | `blind` 필드 누락·형식 오류 (아래 4.6) |
 
-기본 OFF 라서 기존 데이터 빌드는 깨지지 않는다. **새 과목은 넷 다 켜서 작업**한다.
+기본 OFF 라서 기존 데이터 빌드는 깨지지 않는다. **새 과목은 다섯 게이트를 모두 켜서 작업**한다.
 
 ### 4.5 `--strict-qid` — 뷰어 진도 키 충돌
 
@@ -229,6 +316,19 @@ python3 validate.py --data "$WORK/questions_data.py" --raw "$WORK/all_questions.
 - **판정**: stem 이 *다른* 범위의 대표 키워드를 `SCOPE_HITS`(=2)개 이상 포함하고 **자기 범위보다 많이** 맞으면 오배치 의심. 추천 범위·근거 키워드와 함께 출력하고 빌드를 거부한다.
 - **재배치는 수동.** 자동 이동은 오판 위험이라 하지 않는다. 임계는 `build.py` 상단 상수로 조정한다.
 - **오탐이 나면 문항을 옮기지 말고 범위 헤더 문구를 바꾼다.** 희귀 토큰 때문에 생기는 경우가 대부분이다.
+
+### 4.6 `--strict-blind` — 블라인드 답 누락·형식 검사
+
+문항마다 `qid`와 `blind`가 완전한지 검사한다.
+
+- `qid`가 없거나 빈 문자열이면 에러다. 전체 `SCOPES`에서 같은 `qid`가 둘 이상이어도 에러다.
+- `blind`가 없거나 dict가 아니면 에러다. `blind.verified`와 `blind.note`는 비어 있을 수 없고, `blind.confidence`는 `high`·`medium`·`low` 중 하나여야 한다.
+- 객관식은 블라인드 정답 마커가 선지 범위 안이어야 한다. `blind.answers`가 있으면 그 집합이 `blind.verified`의 마커 집합과 같아야 한다.
+- 주관식은 정답 문구를 쓰므로 마커 범위와 `answers` 정합을 검사하지 않는다.
+
+`--strict-blind`를 쓰지 않는 기본 모드에서는 `blind`가 없는 문항이 있을 때만 `블라인드 답(blind) 없는 문항 N/M` 요약 경고를 낸다. 형식 오류와 qid 문제는 기본 모드에서 에러로 올리지 않는다.
+
+**`blind ≠ verified`는 검사하지 않는다.** A의 독립 답과 최종 답이 갈린 것은 오류가 아니라 재검증 과정의 측정값이다. 이 차이는 `audit`가 블라인드 생존율과 불일치 목록으로 보고한다.
 
 ---
 
@@ -427,13 +527,13 @@ WORK="$SUBJ/_work"
 # 1) 추출
 python3 "$PIPE/extract.py" --pdf "$SUBJ/<과목> 족보.pdf" --work "$WORK"
 
-# 2) 재검증 데이터 작성 — 템플릿을 복사해 페이지를 읽으며 SCOPES 를 채운다(배치로 누적).
-cp "$PIPE/questions_data_template.py" "$WORK/questions_data.py"
-#    가장 손이 많이 가는 단계다. 문항당 1~2분. 여러 세션에 나눠 한다.
+# 2) ★ 블라인드 3단 분리 — 입력 준비부터 조립까지 3.4의 명령 순서를 따른다.
+#    split → slice → A 풀이/check → scan → B 판정/check → resolve
+#    → C 집필/check → build. 수동 전사 입력은 batches_src/, 조립 출력은 batches/다.
 
 # 3) ★ 빌드 전 통합 검증
 python3 "$PIPE/validate.py" --data "$WORK/questions_data.py" --raw "$WORK/all_questions.json" \
-  --strict-detail --strict-meta --strict-scope
+  --strict-detail --strict-meta --strict-scope --strict-blind
 #    에러 0 이 될 때까지 보완한다.
 #    no-spoiler·커버리지 섹션은 '정보' — 사람이 판정한다.
 
@@ -452,6 +552,9 @@ python3 "$PIPE/../kd_library/build_viewer.py" \
 
 # 6) 렌더 확인
 soffice --headless --convert-to pdf --outdir "$WORK" "$SUBJ/<과목> 족보_재검증본.docx"
+
+# 7) 블라인드 답과 원본·최종 답 관계 감사
+python3 "$PIPE/blindwork.py" audit --work "$WORK"
 ```
 
 **한 단위를 끝낼 때마다 3~5 를 돌린다.** 마지막에 몰아서 하면 어디서 깨졌는지 못 찾는다.
@@ -470,6 +573,8 @@ soffice --headless --convert-to pdf --outdir "$WORK" "$SUBJ/<과목> 족보_재�
 | `tests/test_imgwork.py` | 도판 재배치((문항, slot) 충돌 정리·화소 예산) |
 | `tests/test_llm_segment.py` | 포인터맵 절단·검증 |
 | `tests/test_batch_stats.py` | 배치 통계 집계 |
+| `tests/test_blindwork.py` | `blindwork` 7개 명령(누출 게이트·단계 게이트·조립·감사) |
+| `tests/test_validate_blind_cli.py` | `--strict-blind` CLI |
 | `tests/test_main_lifecycle.py` | `main.py` 단계 연결 |
 | `../kd_library/tests/test_build_viewer.py` · `test_engine.js` | 뷰어 빌더·엔진 |
 

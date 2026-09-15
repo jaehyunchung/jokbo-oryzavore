@@ -22,6 +22,8 @@ run "imgwork 도판 재배치(slot 충돌·화소예산)" python3 jokbo_pipeline
 run "llm_segment 포인터맵 절단·검증"     python3 jokbo_pipeline/tests/test_llm_segment.py
 run "schema + build.detail_gaps"         python3 jokbo_pipeline/tests/test_builders.py
 run "batch_stats 배치 통계"              python3 jokbo_pipeline/tests/test_batch_stats.py
+run "blindwork 3단 분리 CLI(누출·단계 게이트·조립·감사)" python3 jokbo_pipeline/tests/test_blindwork.py
+run "validate --strict-blind CLI" python3 jokbo_pipeline/tests/test_validate_blind_cli.py
 run "main.py lifecycle 통합"            python3 jokbo_pipeline/tests/test_main_lifecycle.py
 run "build_viewer.build_questions"       python3 kd_library/tests/test_build_viewer.py
 

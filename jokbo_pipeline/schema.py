@@ -162,3 +162,44 @@ def n_correct(q):
 def as_text(x):
     """문자열 또는 리스트를 한 문자열로(불릿 합치기)."""
     return " ".join(str(i) for i in x) if isinstance(x, list) else (str(x) if x else "")
+
+
+BLIND_FIELD = "blind"
+QID_FIELD = "qid"
+BLIND_CONFIDENCE = ("high", "medium", "low")
+CIRCLED_MARKERS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+MD_RE = re.compile(
+    r"\*\*(?=\S)[^*\n]{1,60}(?<=\S)\*\*"
+    r"|(?<![\w*])\*(?=\S)[^*\n]{1,40}(?<=\S)\*(?![\w*])"
+)
+
+
+def norm_markers(value, answers=None) -> list[str]:
+    """답 값에서 원문자 정답 마커를 정규화해 중복 없이 반환."""
+    if isinstance(answers, list) and answers:
+        out = []
+        for answer in answers:
+            if isinstance(answer, int) and 1 <= answer <= 20:
+                marker = CIRCLED_MARKERS[answer - 1]
+            elif isinstance(answer, str) and answer and answer[0] in CIRCLED_MARKERS:
+                marker = answer[0]
+            else:
+                continue
+            if marker not in out:
+                out.append(marker)
+        return out
+
+    out = []
+    for marker in re.findall(r"[①-⑳]", str(value)):
+        if marker not in out:
+            out.append(marker)
+    return out
+
+
+def blind_markers(q) -> list[str]:
+    """문항의 blind 답에서 정규화된 원문자 정답 마커를 반환."""
+    blind = q.get("blind")
+    if not isinstance(blind, dict):
+        return []
+    return norm_markers(blind.get("verified"), blind.get("answers"))

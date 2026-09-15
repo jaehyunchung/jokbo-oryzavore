@@ -113,5 +113,12 @@ multi = {"new_expl": "충분히 긴 해설" * 5, "imp": "x", "options": ["①a",
          "verified": "②④", "answers": ["②", "④"], "wrong_option_explanations": ["① 오답", "③ 오답"]}
 eq(detail_gaps(multi), [], "복수정답 오답선지 need=보기-정답수 반영")
 
+assert schema.norm_markers("②") == ["②"]
+assert schema.norm_markers("①, ③", ["①", "③"]) == ["①", "③"]
+assert schema.norm_markers("x", [2, 4]) == ["②", "④"]
+assert schema.blind_markers({}) == []
+assert schema.blind_markers({"blind": {"verified": "④"}}) == ["④"]
+assert schema.MD_RE.search("**강조**") and not schema.MD_RE.search("치식 * 표기")
+
 print(f"\n[test_builders] {PASS[0]} passed, {FAIL[0]} failed")
 sys.exit(1 if FAIL[0] else 0)

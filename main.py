@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 # ─── 버전 (단일 진실) ────────────────────────────────────────────────────────
-__version__ = "1.2.0"   # 1.2.0: Phase2 --segmentation(LLM Segmenter 포인터맵 → 코드 절단, llm_segment) 이식. opt-in·fail-closed(구조/누출 검증 실패 시 blocker). 1.1.0: Phase1 --auto-format(제네릭 포맷추론: format_lab/format_probe) 이식. opt-in(기본 off·기존 추출경로 불변)
+__version__ = "1.3.0"   # 1.2.0: Phase2 --segmentation(LLM Segmenter 포인터맵 → 코드 절단, llm_segment) 이식. opt-in·fail-closed(구조/누출 검증 실패 시 blocker). 1.1.0: Phase1 --auto-format(제네릭 포맷추론: format_lab/format_probe) 이식. opt-in(기본 off·기존 추출경로 불변)
 
 # ─── 패키지 루트 (이 파일 위치) ───────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent
