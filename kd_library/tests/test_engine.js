@@ -139,17 +139,20 @@ function extractConst(name) { return extractConstFrom(src, name); }
 const CONSTS = ['CIRCLED', 'DEPT_RE', 'ROYAL_RE', 'JN_CFG', 'SCOPE_WEIGHT', 'SCOPE_PROF_RE', 'SR_CFG'];
 const FNS = ['getQid', 'loadStats', 'profSeg', 'getProf', 'metaName', 'getOptNum', 'getCorrectNum',
              'normMarker', 'correctSet', 'isMulti', 'asArr', 'isRoyal', 'judge', 'esc', 'bulletize',
+             'optParts', 'splitWrongExpl',
              'jnSubjectContext', 'jnHasImage', 'jnFrequency', 'jnRecency', 'jnStudyCostFromStat',
               'jnPriorityFromStat', 'jnStudyCost', 'jnPriority', 'jnScopeUniverse', 'jnCoverage',
               'scopeTokens', 'scopeTokenStatus', 'scopeStatus', 'scopeMetaMap', 'qPriority',
               'cpBuildToday',
              'srDefaultSched', 'normFont', 'srNextDue', 'srApplyResult', 'srNormalize', 'srNormalizeSched',
-             'srIsGradable', 'srExamMs', 'srClampToExam', 'dbExamState', 'dbMastery',
+             'srIsGradable', 'srExamMs', 'srClampToExam', 'dbExamState', 'dbMastery', 'dbScopeBreakdown', 'dbCalibration',
              'jnCandidates', 'jnExtendPlan', 'jnBuildBlocks',
               'jnBuildPlan', 'jnMarginalGain', 'fnv1a32', 'jnFingerprint', 'jnValidatePlan',
                'jnPairsSeconds', 'jnDataMinutes', 'jnFormatDuration', 'jnClone',
                'jnRemainingSec', 'jnExpectedDoneMs', 'jnComputeDrift', 'jnReplan',
-               'jnBuildAttemptSnapshots', 'jnBuildFinalPlanSnapshot', 'rrBack'];
+               'jnBuildAttemptSnapshots', 'jnBuildFinalPlanSnapshot', 'rrBack',
+               'fqEmpty', 'fqJoin', 'fqNorm', 'fqIndex', 'fqTerms', 'fqRecMatch', 'fqMatch', 'fqEval',
+               'fqRestore', 'fqSerialize'];
 const code = CONSTS.map(extractConst).join('\n') + '\n' + FNS.map(extractFn).join('\n')
            + '\nreturn {' + FNS.join(',') + '};';
 const E = new Function(code)();   // 추출 함수들을 한 스코프에서 평가
@@ -315,6 +318,84 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
   eq(JSON.stringify(wl(5).map(q => q.id)), JSON.stringify(['q1', 'q4', 'q5', 'q3', 'q2']),
      'weaknessList 정렬: 오답 > 🚩 > 빈출 > 미시도 > 정답');
   eq(JSON.stringify(wl(2).map(q => q.id)), JSON.stringify(['q1', 'q4']), 'weaknessList N개 제한');
+  eq(JSON.stringify(wl(5, [q2, q3]).map(q => q.id)), JSON.stringify(['q3', 'q2']),
+     'weaknessList pool: 현재 조건 결과(후보) 안에서만 고른다');
+}
+
+// ── orderQS : 필터 상태를 읽지 않고 byFreq 인자로만 빈출순 ─────────────────────
+{
+  const oSrc = extractFn('orderQS');
+  ok(!/\bfs\b/.test(oSrc), 'orderQS 는 필터 상태(fs)를 읽지 않는다 — 시작 경로가 사용자 조건을 끌 필요 없음');
+  const orderQS = new Function('shuffleOn', 'shuffleArr', oSrc + '\nreturn orderQS;')(false, null);
+  const L3 = [{ id: 'a', years: ['2025'] }, { id: 'b', years: ['2021', '2023', '2025'] }, { id: 'c', years: ['2021', '2025'] }];
+  eq(orderQS(L3, true).map(q => q.id).join(''), 'bca', 'orderQS byFreq: 출제 연도 많은 순');
+  eq(orderQS(L3, false).map(q => q.id).join(''), 'abc', 'orderQS 기본: 원순서');
+}
+
+// ── 통합 필터 엔진(fq*) : 묶음끼리 AND · 묶음 안 OR · 검색 · 내 기록 · 저장 복원 ───────
+{
+  const mk = (id, o = {}) => ({ scope: 'A', meta: '2025 · 이몽룡', stem: 'stem ' + id, options: ['① 가', '② 나'],
+    verified: '①', years: ['2025'], new_expl: '', ...o });
+  const qs = [
+    mk('q0'),
+    mk('q1', { scope: 'B', meta: '2023 · 성춘향', years: [2021, '2023'] }),
+    mk('q2', { years: ['2021', 2021, '2024'], new_expl: '【왕족】 해설에만 폐색전증', meta: '2024 · 성춘향' }),
+    mk('q3', { scope: 'B', years: [], image: 'a.png', stem: '흉부 X선 사진에서 폐 색전 소견' }),
+    mk('q4', { scope: 'C', meta: '2022 · 예시과 임꺽정', years: ['2022', '20250', 'x'], images: ['b.png'],
+      stem: 'NFD 한글 ' + '폐렴'.normalize('NFD') }),
+  ];
+  const idx = qs.map(E.fqIndex);
+  const u = { flags: new Set([idx[1].qid, idx[2].qid]), stats: { [idx[0].qid]: { a: 2, c: 1, e: 0 } },
+    schedQ: { [idx[0].qid]: { d: 1000, h: [[900, 'ng', 2, 'q']] },
+              [idx[2].qid]: { d: 5000, h: [[800, 'ok', 2, 'q'], [700, 'ng', 2, 'q']] } }, now: 2000 };
+  const st = (o = {}) => Object.assign(E.fqEmpty(), o);
+  const run = (o, skip = '') => JSON.stringify(E.fqEval(idx, st(o), u, skip));
+
+  eq(run({}), '[0,1,2,3,4]', 'fq 조건 없음 = 과목 전체');
+  eq(JSON.stringify(idx[1].years), '["2021","2023"]', 'fqIndex 연도: 숫자·문자열 섞여도 같은 문자열로');
+  eq(idx[2].freq, 2, 'fqIndex 빈도: 중복 연도는 한 번(2021·2021·2024 → 2회)');
+  eq(JSON.stringify(idx[4].years), '["2022"]', 'fqIndex 연도: 4자리 연도가 아닌 값(20250·x)은 버린다');
+  eq(idx[3].freq, 0, 'fqIndex: years 가 비면 빈도 0 — meta 연도로 보충하지 않는다');
+  eq(idx[4].prof, '임꺽정', 'fqIndex 교수: meta 의 과 토큰을 뗀 대표 교수');
+  eq(run({ years: new Set(['2021']) }), '[1,2]', 'fq 연도: years[] 중 하나라도 맞으면 통과(대표 연도 아님)');
+  eq(run({ years: new Set(['2025']) }), '[0]', 'fq 연도: years 없는 문항은 meta 가 2025 여도 빠진다');
+  eq(run({ scopes: new Set(['B']), profs: new Set(['성춘향', '이몽룡']) }), '[1,3]', 'fq: 범위 AND (교수 OR)');
+  eq(run({ royal: true, flag: true, scopes: new Set(['A']) }), '[2]', 'fq: 왕족 ∩ 🚩 ∩ 범위 — 체크가 범위를 지우지 않는다');
+  eq(run({ freq2: true }), '[1,2]', 'fq: 2회 이상 출제(왕족 태그와 별개)');
+  eq(run({ img: true }), '[3,4]', 'fq: 도판 문항(image·images)');
+  eq(run({ rec: 'new' }), '[1,2,3,4]', 'fq 내 기록 new: 문제 풀이 기록(_stats.a) 없음');
+  eq(run({ rec: 'due' }), '[0]', 'fq 내 기록 due: 기한이 지난 것만');
+  eq(run({ rec: 'wrong' }), '[0]', 'fq 내 기록 wrong: 가장 최근 평가가 오답(과거 오답 후 맞힌 q2 는 빠짐)');
+  eq(run({ text: '폐색전증' }), '[]', 'fq 검색 기본: 해설에만 있는 단어로는 걸리지 않는다');
+  eq(run({ text: '폐색전증', inExpl: true }), '[2]', 'fq 검색 해설 포함: 해설·정답까지 찾는다');
+  eq(run({ text: '사진 색전' }), '[3]', 'fq 검색: 띄어 쓴 단어는 모두 포함(AND)');
+  eq(run({ text: '"폐 색전"' }), '[3]', 'fq 검색: 따옴표는 붙은 구문');
+  eq(run({ text: '"색전 폐"' }), '[]', 'fq 검색: 구문은 순서까지 맞아야');
+  eq(run({ text: '폐렴' }), '[4]', 'fq 검색: NFD 데이터도 NFC 입력으로 찾는다');
+  eq(run({ text: '폐색전증', inExpl: true, scopes: new Set(['B']) }), '[]',
+     'fq 검색은 다른 조건과 AND — 과목 전체에서 바로 시작하던 회귀 방지');
+  eq(JSON.stringify(E.fqTerms('  A  "b   c"  d ')), '["a","b c","d"]', 'fqTerms: 소문자·공백 정리·구문 하나');
+  eq(run({ scopes: new Set(['C']), years: new Set(['2021']) }, 'scope'), '[1,2]',
+     'fq skip: 칩 후보 수는 자기 묶음 선택을 빼고 센다');
+
+  const opts = { scopes: ['A', 'B'], years: ['2021', '2025'], profs: ['이몽룡'], hasRoyal: true, hasFreq2: true, hasImg: false };
+  const restored = E.fqRestore({ scopes: ['A', 'Z', 3], years: ['2021'], profs: ['없는교수'], royal: true, img: true,
+    flag: 'yes', rec: 'bogus', text: 'x'.repeat(300), inExpl: true }, opts);
+  eq(JSON.stringify(E.fqSerialize(restored)), JSON.stringify({ scopes: ['A'], years: ['2021'], profs: [], royal: true,
+    freq2: false, img: false, flag: false, rec: '', text: 'x'.repeat(200), inExpl: true }),
+     'fqRestore: 데이터에 없는 값·잘못된 타입·없는 도판 조건은 버린다');
+  eq(JSON.stringify(E.fqSerialize(E.fqRestore(null, opts))), JSON.stringify(E.fqSerialize(E.fqEmpty())),
+     'fqRestore: 저장본이 없으면 빈 조건');
+  const rt = st({ scopes: new Set(['B']), years: new Set(['2025']), rec: 'due', text: '폐', freq2: true });
+  eq(JSON.stringify(E.fqSerialize(E.fqRestore(JSON.parse(JSON.stringify(E.fqSerialize(rt))), opts))),
+     JSON.stringify(E.fqSerialize(rt)), 'fqSerialize ↔ fqRestore 왕복');
+  for (const name of ['fqIndex', 'fqRecMatch', 'fqMatch', 'fqEval', 'fqRestore']) {
+    const s = extractFn(name);
+    for (const [label, re] of [['loadStats(', /\bloadStats\s*\(/], ['loadFlags(', /\bloadFlags\s*\(/],
+      ['loadSched(', /\bloadSched\s*\(/], ['localStorage', /\blocalStorage\b/], ['ALL_Q', /\bALL_Q\b/], ['document', /\bdocument\b/]]) {
+      ok(!re.test(s), `${name} 순수성: ${label} 참조 없음`);
+    }
+  }
 }
 
 
@@ -363,6 +444,54 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
                                        'ok', 2, T, null, 's', false);
   eq(JSON.stringify([firstCorrect.k, firstCorrect.d]), JSON.stringify([1, T + 4 * H]),
      'k=0 보통 확신 정답 → k=1·4시간');
+  let quickRetry = firstCorrect;
+  for (const offset of [60000, 120000]) {
+    quickRetry = E.srApplyResult(quickRetry, 'ok', 2, T + offset, null, 's', false);
+  }
+  eq(quickRetry.k, 1, 'T1: 2분 내 정답 3회는 k=1 유지 (C3 숙련 승급 금지)');
+  eq(quickRetry.d, firstCorrect.d, 'T1: 기한 전 재시도는 기존 due 유지');
+  eq(quickRetry.l, T + 120000, 'T1: 승급 없이 마지막 시각 갱신');
+  eq(JSON.stringify(quickRetry.h), JSON.stringify([
+    [T + 120000, 'ok', 2, 's'], [T + 60000, 'ok', 2, 's'], [T, 'ok', 2, 's'],
+  ]), 'T1: 승급 없이도 모든 재시도 history 기록');
+  const spaced = E.srApplyResult(firstCorrect, 'ok', 2, T + 5 * H, null, 's', false);
+  eq(spaced.k, 2, 'T2: 4시간 기한 뒤 5시간에 정답 → k=2');
+  eq(spaced.d, T + 29 * H, 'T2: 승급 전 k=1로 다음 due 계산');
+  for (const source of ['s', 'x', 'j']) {
+    const early = E.srApplyResult(firstCorrect, 'ok', 3, T + H, null, source, false);
+    eq(JSON.stringify([early.k, early.d]), JSON.stringify([1, T + 4 * H]),
+       `${source}: 확신 정답도 기한 전에는 k·due 유지`);
+    const onTime = E.srApplyResult(firstCorrect, 'ok', 2, firstCorrect.d, null, source, false);
+    eq(onTime.k, 2, `${source}: 기한과 같은 시각이면 승급`);
+  }
+  const rapidBase = { ...base, l: T - H, d: T - 1, hc: 4 };
+  const rapidDue = E.srApplyResult(rapidBase, 'ok', 2, T, null, 'r', false);
+  eq(rapidDue.k, 2, 'T3: rapid 정답은 기한 이후에도 k=2 유지');
+  eq(rapidDue.d, T + 72 * H, 'T3: rapid 기한 이후에는 현재 k로 due 갱신');
+  const rapidEarly = E.srApplyResult(rapidDue, 'ok', 2, T + H, null, 'r', false);
+  eq(rapidEarly.d, rapidDue.d, 'T3: rapid 기한 전에는 due 유지');
+  eq(rapidEarly.k, 2, 'T3: rapid 기한 전에도 k 유지');
+  eq(rapidEarly.l, T + H, 'T3: rapid last 갱신');
+  eq(JSON.stringify(rapidEarly.h[0]), JSON.stringify([T + H, 'ok', 2, 'r']),
+     'T3: rapid history의 source 유지');
+  const rapidFresh = E.srApplyResult(base, 'ok', 1, T, null, 'r', false);
+  eq(JSON.stringify([rapidFresh.k, rapidFresh.d]), JSON.stringify([2, T + 72 * H]),
+     'T3: rapid 미예약 정답은 conf와 무관하게 현재 k로 예약하고 승급하지 않음');
+  const rapidWrong = E.srApplyResult(rapidEarly, 'ng', 3, T + 2 * H, null, 'r', false);
+  eq(JSON.stringify([rapidWrong.k, rapidWrong.hc, rapidWrong.d]), JSON.stringify([0, 4, T + 3 * H]),
+     'T4: rapid 확신 오답은 기한 전에도 k=0·hc 유지·1시간 후');
+  const rapidPartial = E.srApplyResult(rapidBase, 'ng', 3, T, null, 'r', true);
+  eq(JSON.stringify([rapidPartial.k, rapidPartial.hc]), JSON.stringify([0, 4]),
+     'T4: rapid 오답은 partial이어도 일반 오답처럼 k=0·hc 유지');
+  const earlyGuess = E.srApplyResult(firstCorrect, 'ok', 1, T + H, null, 's', false);
+  eq(JSON.stringify([earlyGuess.k, earlyGuess.d]), JSON.stringify([1, T + 5 * H]),
+     'R2: 기한 전 찍은 정답은 기존 규칙대로 k 유지·4시간 후 재예약');
+  const earlyWrong = E.srApplyResult(firstCorrect, 'ng', 3, T + H, null, 'x', false);
+  eq(JSON.stringify([earlyWrong.k, earlyWrong.hc, earlyWrong.d]), JSON.stringify([0, 1, T + 2 * H]),
+     'R2: 기한 전 일반 확신 오답도 k=0·hc 증가·1시간 후');
+  const earlyPartial = E.srApplyResult({ ...firstCorrect, k: 2 }, 'ng', 2, T + H, null, 'j', true);
+  eq(JSON.stringify([earlyPartial.k, earlyPartial.d]), JSON.stringify([1, T + 2 * H]),
+     'R2: 기한 전 부분 오답도 k 한 단계 감소·1시간 후');
   const guessed = E.srApplyResult(base, 'ok', 1, T, null, 's', false);
   eq(JSON.stringify([guessed.k, guessed.d]), JSON.stringify([2, T + 4 * H]),
      '찍은 정답은 k 불변·4시간 후');
@@ -476,11 +605,12 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
     getItem: () => '{"future":7,"shuffle":false}',
     setItem: (_key, value) => { prefsWrite = value; },
   };
-  const savePrefs = new Function('localStorage', "const PREF_KEY='fixture_prefs'; let shuffleOn=true, hideInfo=true, timerOn=false;\n" +
+  const savePrefs = new Function('localStorage', "const PREF_KEY='fixture_prefs'; let shuffleOn=true, hideInfo=true, timerOn=false, veilOn=true;\n" +
     extractFn('loadPrefsRaw') + '\n' + extractFn('savePrefs') + '\nreturn savePrefs;')(prefsRoundTripStorage);
   savePrefs();
-  eq(JSON.stringify(JSON.parse(prefsWrite)), JSON.stringify({ future: 7, shuffle: true, hide: true, timer: false }),
-     'savePrefs는 미지 필드를 보존하고 기존 토글만 덮어씀');
+  eq(JSON.stringify(JSON.parse(prefsWrite)), JSON.stringify({ future: 7, shuffle: true, hide: true, timer: false, veil: true }),
+     'savePrefs는 미지 필드를 보존하고 기존 토글(+veil)만 덮어씀');
+  ok(/veilOn\s*=\s*!!p\.veil/.test(extractFn('loadPrefs')), 'loadPrefs 는 _prefs.veil 을 불리언으로 읽는다(없으면 OFF)');
 
   let loadCalls = 0;
   const earlySrRecord = new Function('loadSched', extractFn('srRecord') + '\nreturn srRecord;')(
@@ -528,6 +658,77 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
   eq(JSON.stringify(mastery.get('C')),
      JSON.stringify({ gradable: 0, mastered: 0, due: 0, ungradable: 1 }),
      'dbMastery C: 채점불가만 있는 범위도 Map에 유지');
+  const stored = { ...E.srDefaultSched(), q: sched.q };
+  const storedSnapshot = JSON.stringify(stored);
+  const loaded = E.srNormalizeSched(stored, {}, T);
+  eq(loaded.changed, true, '필수 이력 필드가 없는 기록은 기존 정규화로 채움');
+  eq(JSON.stringify([...E.dbMastery(allQ, loaded.sched, T)]), JSON.stringify([...mastery]),
+     'R4: 저장된 k·due는 그대로 로드되어 숙련·복습 수 불변');
+  eq(JSON.stringify(stored), storedSnapshot, 'R4: 정규화는 기존 저장 입력 비변경');
+  const loadedAgain = E.srNormalizeSched(loaded.sched, {}, T);
+  eq(loadedAgain.changed, false, 'R4: 유효한 기존 기록을 로드할 때 변환 없음');
+  eq(JSON.stringify(loadedAgain.sched), JSON.stringify(loaded.sched), 'R4: 기존 k·due·이력 완전 보존');
+
+  // ── dbScopeBreakdown : 범위 행 3분할(숙련/학습 중/미시작) — 채점불가 제외, 기록 존재 = 시도 ──
+  const breakdown = E.dbScopeBreakdown(allQ, sched);
+  eq(JSON.stringify(breakdown.get('A')),
+     JSON.stringify({ mastered: 1, learning: 1, untouched: 0, gradable: 2 }),
+     'dbScopeBreakdown A: k=3 숙련 1 · k=1 학습 중 1 · 채점불가 a2 는 어디에도 안 섌다');
+  eq(JSON.stringify(breakdown.get('B')),
+     JSON.stringify({ mastered: 1, learning: 0, untouched: 1, gradable: 2 }),
+     'dbScopeBreakdown B: 기록 없는 문항은 미시작');
+  eq(JSON.stringify(breakdown.get('C')),
+     JSON.stringify({ mastered: 0, learning: 0, untouched: 0, gradable: 0 }),
+     'dbScopeBreakdown C: 채점불가만 있는 범위는 Map 에 남되 전부 0');
+  for (const [scope, parts] of breakdown)
+    eq(parts.mastered + parts.learning + parts.untouched, parts.gradable,
+       `dbScopeBreakdown ${scope}: 세 구간 합 = 채점 가능 수`);
+  eq(JSON.stringify([...E.dbScopeBreakdown(allQ, {}).values()].map(p => p.untouched)), JSON.stringify([2, 2, 0]),
+     'dbScopeBreakdown: 기록이 전혀 없으면 채점 가능 문항 전부 미시작');
+  // k=2 는 MASTER_STREAK(3) 미만이라 학습 중, 옛 _stats 만 있는 오답 문항(정규화 후 k=0·l=null·h=[])도 학습 중이어야 한다
+  const legacyQ = [makeQ('d0', 'D'), makeQ('d1', 'D'), makeQ('d2', 'D')];
+  const legacySched = E.srNormalizeSched(
+    { q: { [E.getQid(legacyQ[1])]: { k: 2, l: T - H, d: T + H, hc: 0, h: [[T - H, 'ok', 3, 's']] } } },
+    { [E.getQid(legacyQ[0])]: { a: 2, c: 0, e: 0 } }, T).sched;
+  eq(JSON.stringify(E.dbScopeBreakdown(legacyQ, legacySched).get('D')),
+     JSON.stringify({ mastered: 0, learning: 2, untouched: 1, gradable: 3 }),
+     'dbScopeBreakdown D: k=2 문항과 옛 _stats 오답 문항(k=0)은 학습 중, 나머지는 미시작');
+  const dashSrc = extractFn('dbRenderV2');
+  ok(/dbScopeBreakdown\(/.test(dashSrc) && /dr-seg/.test(dashSrc) && /미시작/.test(dashSrc),
+     'dbRenderV2 는 dbScopeBreakdown 으로 3분할 막대를 그리고 시도 없는 범위는 미시작으로 표시');
+
+  // ── 시작 화면 '오늘' 카드 배선 — renderFilter·dbSetExam·cpSetBudget 뒤에 다시 그린다 ──
+  for (const name of ['renderFilter', 'dbSetExam', 'cpSetBudget'])
+    ok(/renderTodayCard\(\)/.test(extractFn(name)), `${name} 는 renderTodayCard() 를 호출`);
+  const cardSrc = extractFn('renderTodayCard');
+  ok(/getElementById\('today-card'\)[^;]*;\s*if\s*\(\s*!card\s*\)\s*return/.test(cardSrc),
+     'renderTodayCard: 카드 요소가 없으면 즉시 반환(대시보드에서 dbSetExam 을 불러도 안전)');
+  ok(/cpBuildToday\(/.test(cardSrc) && /dbExamState\(/.test(cardSrc), 'renderTodayCard: cpBuildToday 와 dbExamState 를 그대로 쓴다');
+  ok(/onclick="cpStart\(\)"/.test(cardSrc) && /onclick="cpOpen\(\)"/.test(cardSrc), 'renderTodayCard: 주 버튼은 cpStart, 구성 보기는 cpOpen');
+  ok(/\$\{total\?'':' disabled'\}/.test(cardSrc), 'renderTodayCard: 할 일이 0이면 주 버튼 disabled');
+  const todaySrc = extractFn('cpRenderToday');
+  ok(/<details/.test(todaySrc) && /<summary>/.test(todaySrc), 'cpRenderToday: 문항 목록은 접힌 details 안');
+  ok(todaySrc.indexOf('onclick="cpStart()"') < todaySrc.indexOf('id="cp-budget-min"'), 'cpRenderToday: 행동 버튼이 예산 입력보다 위');
+  ok(/\[15,30,60,90\]/.test(todaySrc) && /cpSetBudget\(\$\{min\}\)/.test(todaySrc), 'cpRenderToday: 예산 프리셋 15·30·60·90 칩도 cpSetBudget 을 거친다');
+
+  const calibrationSched = { q: {
+    a: { hc: 2, h: [[T, 'ok', 3, 's'], [T - 1, 'ng', 3, 'x'],
+                    [T - 2, 'ok', 2, 'j'], [T - 3, 'ng', 1, 's']] },
+    b: { hc: 0, h: [[T, 'ng', 2, 'x'], [T - 1, 'ok', 1, 's'],
+                    [T - 2, 'ok', 3, 'r'], [T - 3, 'ng', 3, 'r'],
+                    [T - 4, 'ok', 2, 'r'], [T - 5, 'ng', 1, 'r'],
+                    [T - 6, 'sk', 3, 's'], [T - 7, 'un', 2, 'j']] },
+    c: { hc: 1, h: [] },
+    legacy: { hc: 0 },
+  } };
+  const calibrationSnapshot = JSON.stringify(calibrationSched);
+  eq(JSON.stringify(E.dbCalibration(calibrationSched)), JSON.stringify({
+    levels: { 3: { n: 2, ok: 1 }, 2: { n: 2, ok: 1 }, 1: { n: 2, ok: 1 } }, hcOpen: 2,
+  }), 'T5: 확신도별 모든 실제 풀이 집계·rapid/sk/un 제외·hc는 문항 수');
+  eq(JSON.stringify(E.dbCalibration({ q: {} })), JSON.stringify({
+    levels: { 3: { n: 0, ok: 0 }, 2: { n: 0, ok: 0 }, 1: { n: 0, ok: 0 } }, hcOpen: 0,
+  }), 'T5: 이력이 없으면 모든 보정 집계 0');
+  eq(JSON.stringify(calibrationSched), calibrationSnapshot, 'T5: 보정 집계는 입력 비변경');
 }
 
 // ── TODAY: due 복습 + 우선순위 신규 문항 ─────────────────────────────────────
@@ -1526,6 +1727,74 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
                                   [/rrRate\('ng'\)/, "2→rrRate('ng')"], [/rrNext\(\)/, 'ArrowRight→rrNext']]) {
     ok(pattern.test(rapidBranch), `한 줄 복습 키 분기 ${label}`);
   }
+}
+
+// ── P1 퀴즈 화면: 오답 선지 분리(splitWrongExpl) · 선지 마커 분리(optParts) ───────
+{
+  const q = { verified: '③ 정답', options: ['① a', '② b', '③ c', '④ d', '⑤ e'],
+    wrong_option_explanations: ['① 첫째 이유', '② 둘째 이유', '④ 넷째 이유', '⑤ 다섯째 이유'] };
+  let s = E.splitWrongExpl(q, '①');
+  eq(JSON.stringify(s.mine), JSON.stringify(['① 첫째 이유']), '고른 오답 ① 의 해설만 mine');
+  eq(JSON.stringify(s.rest), JSON.stringify(['② 둘째 이유', '④ 넷째 이유', '⑤ 다섯째 이유']), '나머지는 rest, 원본 순서 유지');
+  s = E.splitWrongExpl(q, ['②', '④']);
+  eq(JSON.stringify(s.mine), JSON.stringify(['② 둘째 이유', '④ 넷째 이유']), '복수 선택 — 고른 오답 둘 다 mine');
+  eq(JSON.stringify(s.rest), JSON.stringify(['① 첫째 이유', '⑤ 다섯째 이유']), '복수 선택 — 나머지 둘은 rest');
+  s = E.splitWrongExpl(q, ['③']);
+  eq(JSON.stringify(s), JSON.stringify({ mine: [], rest: q.wrong_option_explanations }), '정답 마커를 골랐으면 mine 비고 전부 rest');
+  const withCorrect = { ...q, wrong_option_explanations: ['③ 정답 설명', '① 첫째 이유'] };
+  s = E.splitWrongExpl(withCorrect, ['③', '①']);
+  eq(JSON.stringify(s.mine), JSON.stringify(['① 첫째 이유']), '정답 마커 항목은 골랐어도 mine 에 넣지 않는다');
+  eq(JSON.stringify(s.rest), JSON.stringify(['③ 정답 설명']), '정답 마커 항목은 rest 로 간다');
+  const unmarked = { ...q, wrong_option_explanations: ['마커 없는 설명', '② 둘째 이유', '  ④ 들여쓴 마커'] };
+  s = E.splitWrongExpl(unmarked, ['②', '④']);
+  eq(JSON.stringify(s.mine), JSON.stringify(['② 둘째 이유', '  ④ 들여쓴 마커']), '선두 공백 뒤 마커도 매칭');
+  eq(JSON.stringify(s.rest), JSON.stringify(['마커 없는 설명']), '마커 없는 항목은 rest');
+  s = E.splitWrongExpl(q, [1]);
+  eq(JSON.stringify(s.mine), JSON.stringify(['① 첫째 이유']), '숫자 인덱스 선택 1 → ① 로 정규화');
+  s = E.splitWrongExpl({ ...q, wrong_option_explanations: [] }, ['①']);
+  eq(JSON.stringify(s), JSON.stringify({ mine: [], rest: [] }), '빈 배열이면 둘 다 빈 배열');
+  s = E.splitWrongExpl({ verified: '③', options: q.options }, ['①']);
+  eq(JSON.stringify(s), JSON.stringify({ mine: [], rest: [] }), 'wrong_option_explanations 누락이면 빈 결과');
+  s = E.splitWrongExpl({ ...q, wrong_option_explanations: '문자열' }, ['①']);
+  eq(JSON.stringify(s), JSON.stringify({ mine: [], rest: [] }), '배열이 아니면 빈 결과(렌더 쪽 방어)');
+  s = E.splitWrongExpl(q, null);
+  eq(JSON.stringify(s), JSON.stringify({ mine: [], rest: q.wrong_option_explanations }), '선택 없음(null) → 전부 rest');
+  s = E.splitWrongExpl(q, []);
+  eq(s.mine.length, 0, '빈 선택 배열 → mine 없음');
+  const multiQ = { verified: '복수', answers: ['②', '④'], options: ['①a', '②b', '③c', '④d', '⑤e'],
+    wrong_option_explanations: ['① x', '③ y', '⑤ z'] };
+  s = E.splitWrongExpl(multiQ, ['②', '③']);
+  eq(JSON.stringify(s.mine), JSON.stringify(['③ y']), '복수정답 — 고른 것 중 정답 ② 는 빼고 오답 ③ 만 mine');
+  eq(JSON.stringify(s.rest), JSON.stringify(['① x', '⑤ z']), '복수정답 — 나머지 rest');
+  ok(E.splitWrongExpl(null, ['①']).rest.length === 0, 'q 가 null 이어도 던지지 않는다');
+
+  let p = E.optParts('③ 심방세동');
+  eq(p.mark, '③', 'optParts 선두 마커 추출');
+  eq(p.text, '심방세동', 'optParts 본문에서 마커 제거');
+  p = E.optParts('마커 없는 선지');
+  eq(p.mark, null, '마커 없으면 mark null');
+  eq(p.text, '마커 없는 선지', '마커 없으면 본문 그대로');
+  p = E.optParts('  ⑤  앞뒤 공백 ');
+  eq(p.mark, '⑤', '선두 공백 뒤 마커 인식');
+  eq(p.text, '앞뒤 공백', '본문 앞뒤 공백 제거');
+  p = E.optParts('   공백만 앞에');
+  eq(p.mark, null, '공백 뒤 마커 없음 → null');
+  eq(p.text, '공백만 앞에', '마커 없어도 본문 trim');
+  eq(E.optParts('⑫ R형 선지').mark, '⑫', '⑩ 이상 마커도 지원');
+  eq(E.optParts('①').text, '', '마커만 있으면 본문 빈 문자열');
+  eq(E.optParts('').mark, null, '빈 문자열 mark null');
+  eq(E.optParts(null).text, '', 'null → 빈 본문');
+  eq(E.optParts('3) 숫자 괄호').mark, null, '원문자 아닌 번호는 마커로 보지 않는다');
+  eq(E.optParts('본문 ② 중간 마커').mark, null, '중간의 마커는 선두 마커가 아니다');
+
+  // 세션·해설 연결(스키마): 고른 마커는 _session 의 새 선택 필드 sessSels 로 저장·복원되고, showExpl 이 분리 결과를 쓴다.
+  ok(/sessSels/.test(extractFn('saveSession')), 'saveSession 은 sessSels 를 _session 에 함께 저장');
+  ok(/sessSels\s*=\s*s\.sessSels\s*\|\|\s*\{\}/.test(extractFn('resumeSession')), 'resumeSession 은 sessSels 없는 구버전 세션도 빈 객체로 복원');
+  const showExplSrc = extractFn('showExpl');
+  ok(/splitWrongExpl\(q/.test(showExplSrc), 'showExpl 은 splitWrongExpl 로 오답 선지를 가른다');
+  ok(/<details/.test(showExplSrc) && /<summary>/.test(showExplSrc), '원본 정답·해설·출처는 접힌 details 안');
+  const coreAt = showExplSrc.indexOf('blk-core'), mineAt = showExplSrc.indexOf('blk-mine'), explAt = showExplSrc.indexOf('bulletize(q.new_expl');
+  ok(coreAt > 0 && mineAt > coreAt && explAt > mineAt, '블록 순서: 핵심 → 내가 고른 답 → 해설');
 }
 
 // ── 요약 ─────────────────────────────────────────────────────────────────────
