@@ -18,6 +18,42 @@ const TPL = path.join(__dirname, '..', 'viewer_template.html');
 const src = fs.readFileSync(TPL, 'utf8');
 
 // ── 템플릿에서 함수/상수 소스를 균형 중괄호로 추출 ───────────────────────────
+function skipTemplateExpression(source, start, end) {
+  let depth = 1, state = 'code', prev = '';
+  for (let i = start; i < end; i++) {
+    const ch = source[i], next = source[i + 1];
+    if (state === 'line') { if (ch === '\n') state = 'code'; continue; }
+    if (state === 'block') { if (ch === '*' && next === '/') { state = 'code'; i++; } continue; }
+    if (state === 'regex') {
+      if (ch === '\\') i++;
+      else if (ch === '/') { state = 'code'; prev = 'x'; }
+      continue;
+    }
+    if (state !== 'code') {
+      if (ch === '\\') i++;
+      else if (ch === state) { state = 'code'; prev = 'x'; }
+      continue;
+    }
+    if (ch === '/' && next === '/') { state = 'line'; i++; continue; }
+    if (ch === '/' && next === '*') { state = 'block'; i++; continue; }
+    if (ch === '/' && (!prev || /[({[=,:;!?&|+\-*%^~<>]/.test(prev))) { state = 'regex'; continue; }
+    if (ch === "'" || ch === '"') { state = ch; continue; }
+    if (ch === '`') { i = skipTemplate(source, i, end); prev = 'x'; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) return i;
+    if (!/\s/.test(ch)) prev = ch;
+  }
+  return end - 1;
+}
+function skipTemplate(source, start, end) {
+  for (let i = start + 1; i < end; i++) {
+    const ch = source[i], next = source[i + 1];
+    if (ch === '\\') { i++; continue; }
+    if (ch === '`') return i;
+    if (ch === '$' && next === '{') i = skipTemplateExpression(source, i + 2, end);
+  }
+  return end - 1;
+}
 function scanCode(source, start, visit, end = source.length) {
   let state = 'code', prev = '';
   for (let i = start; i < end; i++) {
@@ -37,7 +73,8 @@ function scanCode(source, start, visit, end = source.length) {
     if (ch === '/' && next === '/') { state = 'line'; i++; continue; }
     if (ch === '/' && next === '*') { state = 'block'; i++; continue; }
     if (ch === '/' && (!prev || /[({[=,:;!?&|+\-*%^~<>]/.test(prev))) { state = 'regex'; continue; }
-    if (ch === "'" || ch === '"' || ch === '`') { state = ch; continue; }
+    if (ch === "'" || ch === '"') { state = ch; continue; }
+    if (ch === '`') { i = skipTemplate(source, i, end); prev = 'x'; continue; }
     const result = visit(ch, i);
     if (result !== undefined) return result;
     if (!/\s/.test(ch)) prev = ch;
@@ -103,8 +140,9 @@ const CONSTS = ['CIRCLED', 'DEPT_RE', 'ROYAL_RE', 'JN_CFG', 'SCOPE_WEIGHT', 'SCO
 const FNS = ['getQid', 'loadStats', 'profSeg', 'getProf', 'metaName', 'getOptNum', 'getCorrectNum',
              'normMarker', 'correctSet', 'isMulti', 'asArr', 'isRoyal', 'judge', 'esc', 'bulletize',
              'jnSubjectContext', 'jnHasImage', 'jnFrequency', 'jnRecency', 'jnStudyCostFromStat',
-             'jnPriorityFromStat', 'jnStudyCost', 'jnPriority', 'jnScopeUniverse', 'jnCoverage',
-             'scopeTokens', 'scopeTokenStatus', 'scopeStatus', 'scopeMetaMap', 'qPriority', 'cpBuildToday',
+              'jnPriorityFromStat', 'jnStudyCost', 'jnPriority', 'jnScopeUniverse', 'jnCoverage',
+              'scopeTokens', 'scopeTokenStatus', 'scopeStatus', 'scopeMetaMap', 'qPriority',
+              'cpBuildToday',
              'srDefaultSched', 'normFont', 'srNextDue', 'srApplyResult', 'srNormalize', 'srNormalizeSched',
              'srIsGradable', 'srExamMs', 'srClampToExam', 'dbExamState', 'dbMastery',
              'jnCandidates', 'jnExtendPlan', 'jnBuildBlocks',
@@ -121,6 +159,7 @@ let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; } else { fail++; console.error('  ✗', msg); } }
 function eq(a, b, msg) { ok(a === b, `${msg}  (got ${JSON.stringify(a)}, want ${JSON.stringify(b)})`); }
 function close(a, b, msg, eps = 1e-9) { ok(Math.abs(a - b) < eps, `${msg}  (got ${a}, want ${b})`); }
+
 
 // ── extractFnFrom/extractConstFrom 하드닝 자기테스트 ───────────────────────────
 {
@@ -142,6 +181,9 @@ function close(a, b, msg, eps = 1e-9) { ok(Math.abs(a - b) < eps, `${msg}  (got 
   const escapedTick = 'function foo(){ return `a\\`b`; }';
   const tickFoo = new Function(extractFnFrom(escapedTick, 'foo') + '\nreturn foo;')();
   eq(tickFoo(), 'a`b', '템플릿 리터럴의 이스케이프 백틱 처리');
+
+  const nestedTick = "function foo(){ return `<div>${[1].map(x=>`<b>${x}</b>`).join('')}</div>`; }\nconst AFTER=1;";
+  eq(extractConstFrom(nestedTick, 'AFTER'), 'const AFTER=1;', '중첩 템플릿 리터럴 뒤 상수 추출');
 }
 
 // ── judge / correctSet : 채점 정확성(가장 중요) ──────────────────────────────
@@ -222,6 +264,12 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
      JSON.stringify(['임꺽정(세부단원 신설)', 'CPX 미개설']),
      'scopeTokens (c) 괄호를 보존한 raw 토큰');
 
+  const iHeader = '… · [2026 담당교수: 김구·유관순  ← 2025 안중근·장보고]';
+  eq(E.scopeStatus(iHeader, new Set(['안중근', '장보고'])).status, 'changed',
+     "scopeStatus (i) '←' 뒤 직전 담당은 판정에서 제외");
+  eq(JSON.stringify(E.scopeTokens(iHeader)), JSON.stringify(['김구', '유관순']),
+     "scopeTokens (i) '←' 앞 토큰만");
+
   const unknown = { status: 'unknown', weight: 1, prof2026: '', tokens: [] };
   eq(JSON.stringify(E.scopeStatus('부록 — 2022학년도 원본 시험지', new Set(['아무개']))),
      JSON.stringify(unknown), 'scopeStatus (d) 교수란 없는 헤더');
@@ -268,6 +316,7 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
      'weaknessList 정렬: 오답 > 🚩 > 빈출 > 미시도 > 정답');
   eq(JSON.stringify(wl(2).map(q => q.id)), JSON.stringify(['q1', 'q4']), 'weaknessList N개 제한');
 }
+
 
 // ── SCHED 시험일 역산 복습 스케줄러 ──────────────────────────────────────────
 {
@@ -1350,9 +1399,14 @@ eq(E.metaName('2023 · 예시과 김철수'), '2023 · 김철수', 'metaName 이
   const showExplStart = src.indexOf('function showExpl(');
   const showExplEnd = src.indexOf('function clickFlag(', showExplStart);
   ok(showExplStart > 0 && showExplEnd > showExplStart, 'showExpl 정적 검사 구획을 찾는다');
+  const showExplSource = src.slice(showExplStart, showExplEnd);
+  for (const field of ['q.imp', 'q.clinical_summary', 'q.wrong_option_explanations', 'q.tip',
+                       'q.related_theory', 'q.orig_ans', 'q.orig_expl', 'q.source']) {
+    ok(showExplSource.includes(field), `showExpl 기존 해설 블록 ${field} 보존`);
+  }
   for (const name of ['showExpl', 'cpRenderToday', 'dbRenderV2', 'rrRender', 'jnRenderSummary', 'jnRenderSummaryTiers',
                       'jnRenderSummaryGain', 'jnRenderSummaryBlocks', 'jnFormatDuration']) {
-    const fnSource = name === 'showExpl' ? src.slice(showExplStart, showExplEnd) : extractFn(name);
+    const fnSource = name === 'showExpl' ? showExplSource : extractFn(name);
     ok(!CANONICAL.test(fnSource), `${name} 출력 문구가 §46 canonical regex 와 불일치`);
   }
   for (const label of ['필수', '권장', '시간남으면', '제외']) {

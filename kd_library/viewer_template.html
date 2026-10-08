@@ -138,6 +138,20 @@ body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
 .sd{width:7px;height:7px;border-radius:50%;}
 
 .qmain{max-width:680px;margin:0 auto;padding:12px 12px 60px;}
+/* 해설 위치 '오른쪽' — 정답 확인 전(해설 칸이 비어 있을 때)은 기존처럼 가운데 한 열,
+   해설이 채워지면 문제 카드는 왼쪽 열, 해설은 오른쪽 열. 카드 폭은 그대로라 글줄이 다시 안 짜인다.
+   두 열이 들어갈 폭(≥1000px)에서만 적용, 좁으면 기존처럼 아래로 펼친다. */
+@media (min-width:1000px){
+  html[data-expl="right"] .qmain:has(#expl-area:not(:empty)){max-width:1400px;}
+  html[data-expl="right"] .qmain:has(#expl-area:not(:empty)) .qdots{max-width:656px;}
+  html[data-expl="right"] #quiz-body:has(>#expl-area:not(:empty)){display:grid;grid-template-columns:minmax(0,656px) minmax(0,1fr);
+    grid-template-rows:auto auto auto 1fr;column-gap:16px;align-items:start;}   /* 해설이 길면 남는 높이는 4행(빈 행)이 받는다 */
+  html[data-expl="right"] #quiz-body>.sec-badge{grid-column:1;grid-row:1;justify-self:start;}
+  html[data-expl="right"] #quiz-body>.card{grid-column:1;grid-row:2;}
+  html[data-expl="right"] #quiz-body>.nav-row{grid-column:1;grid-row:3;}
+  html[data-expl="right"] #expl-area{grid-column:2;grid-row:1 / span 4;position:sticky;top:12px;
+    max-height:calc(100vh - 24px);overflow-y:auto;}
+}
 .qdots{display:flex;flex-wrap:nowrap;gap:5px;margin-bottom:11px;
   overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-ms-overflow-style:none;}
 .qdots::-webkit-scrollbar{display:none;}
@@ -258,6 +272,8 @@ body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
 .expl-orig b{color:#374151;}
 .expl-src{font-size:11px;color:var(--sub);margin-top:4px;font-style:italic;}
 
+
+
 .nav-row{display:flex;gap:7px;}
 .btn-nav{flex:1;padding:11px;border-radius:12px;border:1.5px solid var(--border);
   background:var(--card);cursor:pointer;font-size:14px;font-weight:600;color:var(--text);transition:all .12s;}
@@ -356,10 +372,12 @@ body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
 /* 액션 버튼(이어풀기·약점 집중)은 한 덩어리로 묶어 통째로 줄바꿈시킨다.
    → 좁은 화면에서 버튼 하나만 다음 줄에 외톨이로 남지 않는다. */
 .f-acts{display:flex;gap:8px;}
-.search-box{flex:1;display:flex;gap:6px;min-width:200px;}
-.search-box input{flex:1;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;outline:none;background:var(--card);color:var(--text);}
+.search-box{flex:1;display:flex;gap:6px;min-width:240px;}
+/* min-width:0 — input 의 기본 고유폭 때문에 검색 상자가 자기 몫보다 넓어져
+   [검색] 버튼이 옆 버튼 묶음 아래로 파고드는(겹치는) 것을 막는다. */
+.search-box input{flex:1;min-width:0;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;outline:none;background:var(--card);color:var(--text);}
 .search-box input:focus{border-color:var(--primary);}
-.sb-go{border:none;background:var(--primary);color:#fff;border-radius:10px;padding:0 14px;font-weight:700;cursor:pointer;font-size:13px;}
+.sb-go{border:none;background:var(--primary);color:#fff;border-radius:10px;padding:0 14px;font-weight:700;cursor:pointer;font-size:13px;flex-shrink:0;white-space:nowrap;}
 .btn-resume{border:1.5px solid var(--ok);background:var(--ok-bg);color:var(--ok);border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;white-space:nowrap;}
 .search-empty{font-size:12px;color:var(--ng);margin:-6px 2px 10px;}
 .opt-row{flex-wrap:wrap;}
@@ -582,6 +600,8 @@ body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
   </div>
 </div>
 
+
+
 <!-- ══════════ SETTINGS MODAL ══════════ -->
 <div class="modal-bg" id="modal-bg">
   <div class="modal">
@@ -623,6 +643,16 @@ body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
         </div>
       </div>
       <div class="rr-sub">문두·선지·해설·한 줄 복습 정답의 글자 크기를 조절합니다.</div>
+    </div>
+    <div class="reset-row">
+      <div class="rr-top">
+        <span>해설 위치</span>
+        <div class="fs-row" id="ex-row" role="group" aria-label="해설 위치">
+          <button type="button" class="opt-tg" data-expl="below" onclick="explSide('below')" aria-pressed="true">아래</button>
+          <button type="button" class="opt-tg" data-expl="right" onclick="explSide('right')" aria-pressed="false">오른쪽</button>
+        </div>
+      </div>
+      <div class="rr-sub">정답 확인 후 해설을 문제 아래 또는 오른쪽에 펼칩니다. 오른쪽은 화면 폭이 넓을 때(1000px 이상)만 적용됩니다.</div>
     </div>
     <div class="reset-row">
       <div class="rr-top"><span>💾 진도 백업</span></div>
@@ -908,7 +938,7 @@ function openSettings(){
   document.getElementById('rs-flag-btn').disabled=loadFlags().size===0;
   document.getElementById('rs-stat-btn').disabled=cum.attempts===0&&Object.keys(loadSched().q).length===0;
   cancelReset('flag'); cancelReset('stat');
-  renderConfToggle(); renderFontButtons();
+  renderConfToggle(); renderFontButtons(); renderExplButtons();
   document.getElementById('modal-bg').classList.add('on');
 }
 function toggleConf(){ const s=loadSched(); s.conf=!s.conf; saveSched(s); renderConfToggle(); }
@@ -924,6 +954,17 @@ function renderFontButtons(){
   const cur=normFont(loadSched().font);
   document.querySelectorAll('#fs-row .opt-tg').forEach(b=>{
     const on=b.dataset.font===cur;
+    b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on));
+  });
+}
+/* 해설 위치 below/right — 기기별 화면 취향이라 prefs 에 둔다. CSS 는 html[data-expl] 만 본다. */
+function normExpl(v){ return v==='right'?'right':'below'; }
+function applyExpl(v){ document.documentElement.dataset.expl=normExpl(v); }
+function explSide(v){ try{ localStorage.setItem(PREF_KEY, JSON.stringify({...loadPrefsRaw(), expl:normExpl(v)})); }catch{} applyExpl(v); renderExplButtons(); }
+function renderExplButtons(){
+  const cur=normExpl(loadPrefsRaw().expl);
+  document.querySelectorAll('#ex-row .opt-tg').forEach(b=>{
+    const on=b.dataset.expl===cur;
     b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on));
   });
 }
@@ -1311,7 +1352,7 @@ function reveal(conf=2){
     const mr=document.getElementById('meta-row'); if(mr) mr.innerHTML=metaHTML(q);
     document.getElementById('h-sub').textContent=q.scope;
   }
-  showExpl(q,r,conf); renderDots(); renderStrip(); saveSession();
+  explSlide(()=>showExpl(q,r,conf)); renderDots(); renderStrip(); saveSession();
 }
 // 주관식: 정답 공개 후 스스로 채점(보기 없음).
 function revealSubjective(){
@@ -1321,7 +1362,7 @@ function revealSubjective(){
   if(hideInfo){ const sb=document.getElementById('sec-badge'); if(sb) sb.style.display='';
     const mr=document.getElementById('meta-row'); if(mr) mr.innerHTML=metaHTML(q);
     document.getElementById('h-sub').textContent=q.scope; }
-  showExpl(q, null);                       // '→ 정답: …' + 해설
+  explSlide(()=>showExpl(q, null));        // '→ 정답: …' + 해설
   document.getElementById('expl-area').insertAdjacentHTML('afterbegin',
     `<div class="action-row" style="margin-bottom:10px">스스로 채점 →
        <button class="btn-reveal" onclick="selfGrade('ok')">✅ 맞음</button>
@@ -1356,6 +1397,15 @@ function bulletize(expl){
   if(Array.isArray(expl)) return '<ul>'+expl.map(x=>`<li>${esc(String(x).replace(ROYAL_RE,'').trim())}</li>`).join('')+'</ul>';
   return esc(String(expl).replace(ROYAL_RE,''));
 }
+/* 오른쪽 배치에서 정답을 열면 카드가 가운데→왼쪽으로 건너뛴다. 그 이동만 짧게 미끄러지게(FLIP).
+   정답 확인 순간에만 쓴다 — 이미 푼 문항으로 이동할 때(renderQ)는 애니메이션 없이 바로 두 열. */
+function explSlide(fn){
+  const card=document.querySelector('#quiz-body>.card'); const x0=card?card.getBoundingClientRect().left:0;
+  fn();
+  if(!card||!card.animate) return;
+  const dx=x0-card.getBoundingClientRect().left;
+  if(Math.abs(dx)>1) card.animate([{transform:`translateX(${dx}px)`},{transform:'none'}],{duration:220,easing:'ease-out'});
+}
 function showExpl(q,r,conf){
   const hc=r==='ng'&&conf===3?'<div class="hc-banner">확신했는데 틀렸습니다 — 최우선 복습 대상으로 표시합니다</div>':'';
   const banner=r==='ok'?`<div class="result-banner rb-ok">✓ 정답입니다!<span class="rb-time">⏱ 내 풀이 ${fmtSec(sessElapsed[qi]||0)}</span></div>`
@@ -1382,6 +1432,7 @@ function showExpl(q,r,conf){
       ${(origAns||origExpl||ref)?'<hr class="expl-hr">':''}
       ${origAns}${origExpl}${ref}
     </div>`;
+  
 }
 function clickFlag(){ const q=QS[qi]; updateFlagBtn(toggleFlag(q)); renderDots(); }
 function updateFlagBtn(on){ const b=document.getElementById('btn-flag'); if(b) b.classList.toggle('on',on); }
@@ -1462,12 +1513,14 @@ document.addEventListener('keydown',e=>{
     return;
   }
   const onQ=document.getElementById('screen-quiz').classList.contains('active'); if(!onQ) return;
+  if(e.metaKey||e.ctrlKey||e.altKey) return;   // Cmd+A/S/D·Cmd+1·Cmd+← 등 브라우저 단축키는 건드리지 않는다
+  // A/S/D 는 e.code(물리 키)로 본다 — 한글 자판이면 e.key 가 'ㅁ/ㄴ/ㅇ' 이라 단독 입력이 무시됐다.
   if(e.key>='1'&&e.key<='9'){ if(isLocked(results[qi])) return;   // R형: 1–9 선지(복수정답이면 토글)
     const idx=parseInt(e.key)-1; const opts=document.querySelectorAll('.opt'); if(opts[idx]) selectOpt(opts[idx]); return; }
   if(e.key===' '||e.code==='Space'){ e.preventDefault(); if(mode==='study'&&!isLocked(results[qi])) reveal(); }
-  else if((e.key==='a'||e.key==='A')&&mode==='study'&&!isLocked(results[qi])){ reveal(3); }
-  else if((e.key==='s'||e.key==='S')&&mode==='study'&&!isLocked(results[qi])){ reveal(2); }
-  else if((e.key==='d'||e.key==='D')&&mode==='study'&&!isLocked(results[qi])){ reveal(1); }
+  else if(e.code==='KeyA'&&mode==='study'&&!isLocked(results[qi])){ reveal(3); }
+  else if(e.code==='KeyS'&&mode==='study'&&!isLocked(results[qi])){ reveal(2); }
+  else if(e.code==='KeyD'&&mode==='study'&&!isLocked(results[qi])){ reveal(1); }
   else if(e.key==='ArrowRight'){ e.preventDefault(); if(qi<QS.length-1) go(1); else if(mode==='study') endSession(); else if(mode==='exam') gradeExam(); }
   else if(e.key==='ArrowLeft'){ e.preventDefault(); go(-1); }
 });
@@ -1585,7 +1638,7 @@ const SCOPE_WEIGHT={same:1,unknown:1,changed:0.7,new:0.7,closed:0.3};
 const SCOPE_PROF_RE=/\[(?:19|20)\d{2}[^\]]*?담당교수\s*[:：]\s*([^\]]+)\]/;
 function scopeTokens(header){
   const match=String(header||'').match(SCOPE_PROF_RE);
-  return match?match[1].split('·').map(token=>token.trim()):[];
+  return match?match[1].split('←')[0].split('·').map(token=>token.trim()):[];
 }
 function scopeTokenStatus(rawToken,profSet){
   if(rawToken.includes('미개설')) return 'closed';
@@ -1631,6 +1684,8 @@ function fnv1a32(str){
   return hash>>>0;
 }
 /* PRIORITY:END */
+
+
 
 /* SCHED:START */
 const SCHED_KEY=STORAGE_KEY+'_sched';
@@ -3442,6 +3497,7 @@ jnInit();
 // ─────────── INIT ───────────
 loadPrefs(); renderOptToggles();
 applyFont(loadSched().font);   // 첫 렌더부터 저장된 글자 크기 반영(깜박임 방지)
+applyExpl(loadPrefsRaw().expl);
 renderFilter();
 </script>
 </body>

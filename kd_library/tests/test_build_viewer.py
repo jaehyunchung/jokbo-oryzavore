@@ -8,6 +8,7 @@ test_build_viewer.py — build_viewer.build_questions 회귀 테스트.
 실행: python3 tests/test_build_viewer.py   (pytest 불필요, plain assert)
 """
 import base64
+import json
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ ROOT = KD.parent
 sys.path.insert(0, str(ROOT))
 
 from kd_library import build_viewer      # noqa: E402
+from jokbo_pipeline import schema        # noqa: E402
 
 PASS = [0]
 FAIL = [0]
@@ -34,6 +36,14 @@ def ok(cond, msg):
 
 def eq(a, b, msg):
     ok(a == b, f"{msg}  (got {a!r}, want {b!r})")
+
+
+def extract_app_data(html):
+    marker = "const APP_DATA="
+    start = html.index(marker) + len(marker)
+    end = html.index(";", start)
+    data_json = html[start:end]
+    return data_json, json.loads(data_json)
 
 
 # 1x1 PNG (투명) — 이미지 인라인 테스트용
@@ -151,6 +161,64 @@ with tempfile.TemporaryDirectory() as td:
         ok(False, "light 빌드 출력의 script 구획을 찾을 수 있음")
 
 
+# Given: '<' 제어 문자열이 든 합성 문항.
+with tempfile.TemporaryDirectory() as td:
+    out_dir = Path(td)
+    data_path = out_dir / "questions_data.py"
+    data_path.write_text(
+        """SCOPES = [(
+    '보안 범위 · [2026 담당교수: 김철수]',
+    [{'meta': '2024 · 김철수', 'stem': '문항 </script> <!-- 안전성', 'options': ['① 정답'],
+      'verified': '① 정답', 'new_expl': '해설'},
+     {'meta': '2023 · 이영희', 'stem': '매핑 없는 문항', 'options': [],
+      'verified': '서술', 'new_expl': '해설'}],
+)]
+""",
+        encoding="utf-8",
+    )
+    common_cmd = [
+        sys.executable, str(builder), "--data", str(data_path), "--template", str(template),
+        "--title", "추가 데이터 스모크", "--subject", "테스트",
+        "--storage-key", "escape_smoke",
+    ]
+
+    # When: 새 플래그 없이 기존 CLI 경로로 빌드한다.
+    default_out = out_dir / "default.html"
+    default_run = subprocess.run([*common_cmd, "--out", str(default_out)],
+                                 capture_output=True, text=True)
+
+    # Then: 빌드는 성공하고 새 버전 키가 기본 payload에 들어간다.
+    ok(default_run.returncode == 0, "새 플래그 없이 기존 CLI 빌드 성공")
+    default_html = default_out.read_text(encoding="utf-8") if default_out.exists() else ""
+    default_json, default_payload = extract_app_data(default_html) if default_html else ("", {})
+    eq(default_payload.get("schema_version"), 2, "payload schema_version == 2")
+    eq(default_payload.get("progress_schema_version"), 1,
+       "payload progress_schema_version == 1")
+    eq(default_payload.get("storage_namespace"), "escape_smoke",
+       "payload storage_namespace 는 storageKey와 동일")
+    ok("<" not in default_json, "APP_DATA JSON에는 raw '<'가 없음")
+    eq(default_payload.get("questions", [{}])[0].get("stem"),
+       "문항 </script> <!-- 안전성", "이스케이프 후 stem 값 보존")
+
+    script_start = default_html.find("<script>")
+    script_end = default_html.rfind("</script>")
+    default_js = out_dir / "default.js"
+    if script_start >= 0 and script_end > script_start:
+        default_js.write_text(
+            default_html[script_start + len("<script>"):script_end], encoding="utf-8",
+        )
+        node_run = subprocess.run(
+            ["node", "--check", str(default_js)], capture_output=True, text=True,
+        )
+        ok(node_run.returncode == 0,
+           "</script>와 <!--를 포함한 문항의 빌드 JS가 node --check 통과")
+    else:
+        ok(False, "이스케이프 빌드 출력의 script 구획을 찾을 수 있음")
+
+
+eq(getattr(schema, "SCHEMA_VERSION", None), 2, "schema SCHEMA_VERSION 상수")
+
+
 malformed = """<!doctype html>
 <!-- JEONNAL:START -->
 <script>/* JEONNAL:START *//* JEONNAL:END *//*__DATA__*/</script>
@@ -162,6 +230,8 @@ except SystemExit as exc:
     malformed_error = str(exc)
 ok(malformed_error.startswith("템플릿의 JEONNAL 마커가 손상되었습니다:"),
    "손상된 marker pair는 명확한 한국어 오류로 중단")
+
+
 
 print(f"\n[test_build_viewer] {PASS[0]} passed, {FAIL[0]} failed")
 sys.exit(1 if FAIL[0] else 0)

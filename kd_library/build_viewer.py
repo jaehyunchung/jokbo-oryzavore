@@ -24,12 +24,18 @@ from typing import Final
 # 스키마 단일 정의(KEEP·clean_scope·load_scopes)는 sibling jokbo_pipeline/schema.py 에서 import.
 # 두 폴더는 항상 나란히 두고 배포하므로 jokbo_pipeline 이 옆에 있다(복붙 금지).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from jokbo_pipeline.schema import KEEP, clean_scope, load_scopes  # noqa: E402
+from jokbo_pipeline.schema import (  # noqa: E402
+    KEEP,
+    SCHEMA_VERSION,
+    clean_scope,
+    load_scopes,
+)
 
 JEONNAL_MARKERS: Final[tuple[tuple[str, str, str], ...]] = (
     ("HTML", "<!-- JEONNAL:START -->", "<!-- JEONNAL:END -->"),
     ("JS", "/* JEONNAL:START */", "/* JEONNAL:END */"),
 )
+PROGRESS_SCHEMA_VERSION: Final = 1
 
 
 def validate_jeonnal_markers(template: str) -> None:
@@ -53,6 +59,8 @@ def strip_jeonnal(template: str) -> str:
         end_index = template.find(end_marker, start_index) + len(end_marker)
         template = template[:start_index] + template[end_index:]
     return template
+
+
 
 
 def image_to_data_uri(path: Path) -> str:
@@ -126,6 +134,7 @@ def main():
     questions, missing = build_questions(scopes, images_dir)
     duplicate_qids = find_duplicate_qids(questions)
 
+
     scope_order = [clean_scope(h) for h, _ in scopes]
     n_img = sum(1 for q in questions if isinstance(q.get("image"), str)
                 and q["image"].startswith("data:"))
@@ -136,9 +145,12 @@ def main():
         "storageKey": args.storage_key,
         "scopeOrder": scope_order,
         "questions": questions,
+        "schema_version": SCHEMA_VERSION,
+        "progress_schema_version": PROGRESS_SCHEMA_VERSION,
+        "storage_namespace": args.storage_key,
     }
-    # </script> 가 데이터 문자열에 들어가도 깨지지 않도록 이스케이프
-    data_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+    # script 종료 태그와 HTML 주석 시작 문자열을 만들 수 없도록 '<' 전체를 이스케이프한다.
+    data_json = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003C")
 
     template = Path(args.template).read_text(encoding="utf-8")
     validate_jeonnal_markers(template)

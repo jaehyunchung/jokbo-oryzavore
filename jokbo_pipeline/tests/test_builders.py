@@ -77,6 +77,12 @@ eq(
     "scope_status (c) 괄호를 보존한 raw 토큰",
 )
 
+status = schema.scope_status(
+    "… · [2026 담당교수: 김구·유관순  ← 2025 안중근·장보고]", {"안중근", "장보고"}
+)
+eq(status["status"], "changed", "scope_status (i) '←' 뒤 직전 담당은 판정에서 제외")
+eq(status["tokens"], ["김구", "유관순"], "scope_status (i) '←' 앞 토큰만")
+
 status = schema.scope_status("부록 — 2022학년도 원본 시험지", {"아무개"})
 eq(
     status,

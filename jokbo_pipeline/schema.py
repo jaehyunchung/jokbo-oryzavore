@@ -86,9 +86,11 @@ def scope_year(h):
 
 
 def scope_tokens(header: str | None) -> list[str]:
-    """범위 헤더 교수란을 가운데점으로 나눈 원본 토큰 배열."""
+    """범위 헤더 교수란을 가운데점으로 나눈 원본 토큰 배열.
+
+    '← 2025 …' 뒤는 직전 담당 이력이라 판정에서 뺀다(옛 이름이 '유지'로 잡히지 않게)."""
     m = PROF_RE.search(header or "")
-    return [token.strip() for token in m.group(1).split("·")] if m else []
+    return [token.strip() for token in m.group(1).split("←")[0].split("·")] if m else []
 
 
 def scope_token_status(raw_token: str, prof_names: set[str]) -> str:
@@ -166,6 +168,7 @@ def as_text(x):
 
 BLIND_FIELD = "blind"
 QID_FIELD = "qid"
+SCHEMA_VERSION = 2
 BLIND_CONFIDENCE = ("high", "medium", "low")
 CIRCLED_MARKERS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 
