@@ -18,7 +18,8 @@ pypdf>=5.0,<7
 python-docx>=1.1,<2
 
 # 이미지 처리 — 뷰어 base64 인라인·도판 재압축 (build_viewer.py)
-Pillow>=10.0,<13
+# Pillow 보안 수정 버전(13.0.0) 이상만 허용한다.
+Pillow>=13.0.0,<14
 
 # 문항별 후보 이미지 매핑(extract.py 의 y좌표 기하). 없어도 파이프라인은 돌지만
 # candidate_images 가 비어 이미지 배정이 전부 수동이 된다 — 사진 있는 족보면 사실상 필수.
